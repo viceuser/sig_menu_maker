@@ -76,7 +76,7 @@ function makeTransparentGifFrame(image: HTMLImageElement, width: number, height:
 
 export async function exportGifFromDataUrls(
   pages: string[],
-  fadeInterval: number,
+  frameDurationMs: number,
   width: number,
   height: number,
 ) {
@@ -98,7 +98,7 @@ export async function exportGifFromDataUrls(
   const images = await Promise.all(pages.map((page) => imageFromDataUrl(page)));
   images.forEach((image) => {
     const frame = makeTransparentGifFrame(image, width, height);
-    gif.addFrame(frame, { delay: Math.max(1, fadeInterval) * 1000, copy: true });
+    gif.addFrame(frame, { delay: Math.max(100, Math.round(frameDurationMs)), copy: true });
   });
 
   gif.on("finished", (blob) => {

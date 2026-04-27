@@ -5,10 +5,18 @@ import { arrayMove } from "@dnd-kit/sortable";
 import { v4 as uuidv4 } from "uuid";
 import { DEFAULT_FONT_PRESET, type FontPresetId } from "@/lib/fonts";
 import {
+  DEFAULT_CONTENT_ALIGN,
   DEFAULT_COUNT_COLOR,
   DEFAULT_FADE_INTERVAL,
+  DEFAULT_GAP_BASE,
+  DEFAULT_GAP_MAX,
+  DEFAULT_GAP_MIN,
   DEFAULT_ITEMS_PER_PAGE,
+  DEFAULT_ROW_HEIGHT,
+  DEFAULT_STROKE_WIDTH,
   DEFAULT_TEXT_COLOR,
+  DEFAULT_VERTICAL_PADDING,
+  type ContentAlign,
   type ReactionItem,
 } from "@/lib/types";
 import { loadMenuConfig, saveConfig, saveItems, saveMenuConfig } from "@/lib/storage";
@@ -20,18 +28,14 @@ function createItem(): ReactionItem {
     text: "",
     countColor: DEFAULT_COUNT_COLOR,
     textColor: DEFAULT_TEXT_COLOR,
-    isYellow: false,
-    isNew: false,
-    isUpdate: false,
-    isHot: false,
   };
 }
 
 function createSamples(): ReactionItem[] {
   return [
-    { ...createItem(), count: 1000, text: "환호 리액션", isNew: true },
-    { ...createItem(), count: 3000, text: "댄스 타임", isHot: true },
-    { ...createItem(), count: 5000, text: "노래 한 소절", isUpdate: true },
+    { ...createItem(), count: 1000, text: "샘플 리액션 1" },
+    { ...createItem(), count: 3000, text: "샘플 리액션 2" },
+    { ...createItem(), count: 5000, text: "샘플 리액션 3" },
   ];
 }
 
@@ -41,6 +45,13 @@ export function useReactionStore() {
   const [itemsPerPage, setItemsPerPage] = useState(DEFAULT_ITEMS_PER_PAGE);
   const [fadeInterval, setFadeInterval] = useState(DEFAULT_FADE_INTERVAL);
   const [fontPreset, setFontPreset] = useState<FontPresetId>(DEFAULT_FONT_PRESET);
+  const [contentAlign, setContentAlign] = useState<ContentAlign>(DEFAULT_CONTENT_ALIGN);
+  const [strokeWidth, setStrokeWidth] = useState(DEFAULT_STROKE_WIDTH);
+  const [gapMin, setGapMin] = useState(DEFAULT_GAP_MIN);
+  const [gapBase, setGapBase] = useState(DEFAULT_GAP_BASE);
+  const [gapMax, setGapMax] = useState(DEFAULT_GAP_MAX);
+  const [rowHeight, setRowHeight] = useState(DEFAULT_ROW_HEIGHT);
+  const [verticalPadding, setVerticalPadding] = useState(DEFAULT_VERTICAL_PADDING);
   const [isLoaded, setIsLoaded] = useState(false);
 
   const reload = useCallback(() => {
@@ -50,6 +61,13 @@ export function useReactionStore() {
     setItemsPerPage(config.itemsPerPage || DEFAULT_ITEMS_PER_PAGE);
     setFadeInterval(config.fadeInterval || DEFAULT_FADE_INTERVAL);
     setFontPreset(config.fontPreset as FontPresetId);
+    setContentAlign(config.contentAlign);
+    setStrokeWidth(config.strokeWidth || DEFAULT_STROKE_WIDTH);
+    setGapMin(config.gapMin || DEFAULT_GAP_MIN);
+    setGapBase(config.gapBase || DEFAULT_GAP_BASE);
+    setGapMax(config.gapMax || DEFAULT_GAP_MAX);
+    setRowHeight(config.rowHeight || DEFAULT_ROW_HEIGHT);
+    setVerticalPadding(config.verticalPadding || DEFAULT_VERTICAL_PADDING);
     setSelectedIds(new Set());
     setIsLoaded(true);
   }, []);
@@ -99,12 +117,35 @@ export function useReactionStore() {
   }, []);
 
   const saveAll = useCallback(() => {
-    saveMenuConfig({ items, itemsPerPage, fadeInterval, fontPreset });
-  }, [fadeInterval, fontPreset, items, itemsPerPage]);
+    saveMenuConfig({
+      items,
+      itemsPerPage,
+      fadeInterval,
+      fontPreset,
+      contentAlign,
+      strokeWidth,
+      gapMin,
+      gapBase,
+      gapMax,
+      rowHeight,
+      verticalPadding,
+    });
+  }, [contentAlign, fadeInterval, fontPreset, gapBase, gapMax, gapMin, items, itemsPerPage, rowHeight, strokeWidth, verticalPadding]);
 
   const saveSettings = useCallback(() => {
-    saveConfig({ itemsPerPage, fadeInterval, fontPreset });
-  }, [fadeInterval, fontPreset, itemsPerPage]);
+    saveConfig({
+      itemsPerPage,
+      fadeInterval,
+      fontPreset,
+      contentAlign,
+      strokeWidth,
+      gapMin,
+      gapBase,
+      gapMax,
+      rowHeight,
+      verticalPadding,
+    });
+  }, [contentAlign, fadeInterval, fontPreset, gapBase, gapMax, gapMin, itemsPerPage, rowHeight, strokeWidth, verticalPadding]);
 
   const saveOnlyItems = useCallback(() => {
     saveItems(items);
@@ -119,12 +160,26 @@ export function useReactionStore() {
       itemsPerPage,
       fadeInterval,
       fontPreset,
+      contentAlign,
+      strokeWidth,
+      gapMin,
+      gapBase,
+      gapMax,
+      rowHeight,
+      verticalPadding,
       isLoaded,
       selectedCount: selectedIds.size,
       allSelected,
       setItemsPerPage,
       setFadeInterval,
       setFontPreset,
+      setContentAlign,
+      setStrokeWidth,
+      setGapMin,
+      setGapBase,
+      setGapMax,
+      setRowHeight,
+      setVerticalPadding,
       addItem,
       updateItem,
       deleteSelected,
@@ -139,21 +194,28 @@ export function useReactionStore() {
     [
       addItem,
       allSelected,
+      contentAlign,
       deleteSelected,
       fadeInterval,
       fontPreset,
+      gapBase,
+      gapMax,
+      gapMin,
       isLoaded,
       items,
       itemsPerPage,
+      rowHeight,
       moveItem,
       reload,
       saveAll,
       saveOnlyItems,
       saveSettings,
       selectedIds,
+      strokeWidth,
       toggleAll,
       toggleSelected,
       updateItem,
+      verticalPadding,
     ],
   );
 }

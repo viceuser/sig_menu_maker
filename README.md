@@ -1,36 +1,73 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Reaction Menu Maker
 
-## Getting Started
+방송용 리액션 메뉴판을 편집하고, 미리보기와 GIF/PNG 출력까지 할 수 있는 Next.js 기반 웹 서비스입니다.
 
-First, run the development server:
+## 주요 기능
+
+- 테이블 기반 리액션 항목 편집
+  - 리액션 개수
+  - 리액션 텍스트
+  - 개수 색상
+  - 텍스트 색상
+- 드래그 앤 드롭 순서 변경
+- 전체 선택 및 선택 삭제
+- localStorage 저장 / 불러오기
+- 여기어때 폰트 프리셋 선택
+- 왼쪽 정렬 / 오른쪽 정렬 출력
+- 숫자/텍스트 간격 자동 계산
+- 기본 간격, 행 높이 조절
+- 상세 설정
+  - 최소 간격
+  - 최대 간격
+  - 상하 여백
+- 텍스트 stroke 굵기 조절
+- 단색 / 그라데이션 색상 적용
+  - 가로 그라데이션
+  - 세로 그라데이션
+- 새 창 미리보기
+  - 자동 페이지 전환
+  - 열린 미리보기 창 자동 갱신
+- GIF 저장
+  - 투명 배경
+  - 페이지 단위 슬라이드 출력
+- PNG 저장
+  - 전체 메뉴 컬럼 전개형 출력
+  - 페이지 표시 개수 기준으로 열 분할
+
+## 출력 동작
+
+- GIF
+  - 페이지별 메뉴를 순서대로 전환
+  - 콘텐츠 기준으로 불필요한 좌우 여백을 줄여서 저장
+- PNG
+  - 전체 리스트를 한 장으로 저장
+  - `페이지 표시 개수` 기준으로 한 열씩 나누고, 다음 열을 오른쪽으로 전개
+
+## 기술 스택
+
+- Next.js 16 App Router
+- TypeScript
+- Tailwind CSS
+- `@dnd-kit/core`
+- `@dnd-kit/sortable`
+- `gif.js`
+- HTML Canvas API
+
+## 로컬 실행
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+브라우저에서 `http://127.0.0.1:3000` 또는 `http://localhost:3000` 을 열면 됩니다.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 빌드
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run build
+```
 
-## Learn More
+## 배포
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Vercel production 배포를 기준으로 운영합니다.

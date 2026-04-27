@@ -16,8 +16,8 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import type { ReactNode } from "react";
 import type { ReactionItem } from "@/lib/types";
-import { BadgeToggle } from "./BadgeToggle";
 import { ColorInput } from "./ColorInput";
 
 interface ReactionTableProps {
@@ -52,10 +52,10 @@ export function ReactionTable({
   return (
     <div className="overflow-x-auto border-y border-zinc-200">
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-        <table className="w-full min-w-[1280px] border-collapse text-left text-sm">
+        <table className="w-full min-w-[1080px] border-collapse text-left text-sm">
           <thead className="bg-zinc-100 text-xs font-bold uppercase text-zinc-600">
             <tr>
-              <Th className="w-12 text-center">⠿</Th>
+              <Th className="w-12 text-center">Drag</Th>
               <Th className="w-16 text-center">No.</Th>
               <Th className="w-12 text-center">
                 <input
@@ -68,12 +68,8 @@ export function ReactionTable({
               </Th>
               <Th className="w-36">리액션 개수</Th>
               <Th>리액션 텍스트</Th>
-              <Th className="w-48">리액션 개수 색상</Th>
-              <Th className="w-48">리액션 텍스트 색상</Th>
-              <Th className="w-32 text-center">노란색 강조</Th>
-              <Th className="w-28 text-center">NEW</Th>
-              <Th className="w-28 text-center">UPDATE</Th>
-              <Th className="w-28 text-center">HOT</Th>
+              <Th className="w-[280px]">개수 색상</Th>
+              <Th className="w-[280px]">텍스트 색상</Th>
             </tr>
           </thead>
           <SortableContext items={items.map((item) => item.id)} strategy={verticalListSortingStrategy}>
@@ -128,7 +124,6 @@ function ReactionRow({
       style={style}
       className={[
         "border-t border-zinc-200 bg-white align-middle",
-        item.isYellow ? "bg-yellow-200" : "",
         isDragging ? "relative z-20 shadow-lg" : "",
       ].join(" ")}
     >
@@ -184,65 +179,14 @@ function ReactionRow({
           onChange={(textColor) => onUpdateItem(item.id, { textColor })}
         />
       </Td>
-      <Td className="text-center">
-        <Switch
-          checked={item.isYellow}
-          label="노란색 강조"
-          onChange={(isYellow) => onUpdateItem(item.id, { isYellow })}
-        />
-      </Td>
-      <Td className="text-center">
-        <BadgeToggle label="NEW" checked={item.isNew} onChange={(isNew) => onUpdateItem(item.id, { isNew })} />
-      </Td>
-      <Td className="text-center">
-        <BadgeToggle
-          label="UPDATE"
-          checked={item.isUpdate}
-          onChange={(isUpdate) => onUpdateItem(item.id, { isUpdate })}
-        />
-      </Td>
-      <Td className="text-center">
-        <BadgeToggle label="HOT" checked={item.isHot} onChange={(isHot) => onUpdateItem(item.id, { isHot })} />
-      </Td>
     </tr>
   );
 }
 
-function Switch({
-  checked,
-  label,
-  onChange,
-}: {
-  checked: boolean;
-  label: string;
-  onChange: (checked: boolean) => void;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-label={label}
-      aria-checked={checked}
-      onClick={() => onChange(!checked)}
-      className={[
-        "mx-auto flex h-7 w-12 items-center rounded-full border p-1 transition",
-        checked ? "border-yellow-300 bg-yellow-300" : "border-zinc-300 bg-zinc-100",
-      ].join(" ")}
-    >
-      <span
-        className={[
-          "block h-5 w-5 rounded-full bg-white shadow transition",
-          checked ? "translate-x-5" : "translate-x-0",
-        ].join(" ")}
-      />
-    </button>
-  );
-}
-
-function Th({ className = "", children }: { className?: string; children: React.ReactNode }) {
+function Th({ className = "", children }: { className?: string; children: ReactNode }) {
   return <th className={`border-r border-zinc-200 px-3 py-3 last:border-r-0 ${className}`}>{children}</th>;
 }
 
-function Td({ className = "", children }: { className?: string; children: React.ReactNode }) {
+function Td({ className = "", children }: { className?: string; children: ReactNode }) {
   return <td className={`border-r border-zinc-100 px-3 py-3 last:border-r-0 ${className}`}>{children}</td>;
 }

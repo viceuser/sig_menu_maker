@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useClickOutside } from "@/hooks/useClickOutside";
 import { addRecentColor, getRecentColors, normalizeHex } from "@/lib/recentColors";
+import type { GradientDirection, TextPaint } from "@/lib/types";
 
 const PRESET_COLORS = [
   "#ffffff", "#000000", "#1a1a1a", "#333333", "#666666",
@@ -27,88 +28,284 @@ const PRESET_COLORS = [
   "#ff9500", "#ff3b30", "#4cd964", "#5ac8fa", "#007aff",
 ];
 
+const PALETTE_WIDTH = 360;
+const PALETTE_MIN_HEIGHT = 380;
+const VIEWPORT_MARGIN = 12;
+
 interface ColorInputProps {
-  value: string;
-  onChange: (value: string) => void;
+  value: TextPaint;
+  onChange: (value: TextPaint) => void;
   label: string;
+}
+
+function createPaintPreviewStyle(paint: TextPaint): CSSProperties {
+  if (paint.mode === "solid") {
+    return {
+      backgroundColor: paint.color,
+      backgroundImage:
+        "linear-gradient(135deg, rgba(255,255,255,0.35), rgba(255,255,255,0) 45%), linear-gradient(315deg, rgba(0,0,0,0.18), rgba(0,0,0,0) 55%)",
+    };
+  }
+
+  const direction = paint.direction === "vertical" ? "180deg" : "90deg";
+  return {
+    backgroundImage: `linear-gradient(${direction}, ${paint.from}, ${paint.to})`,
+  };
+}
+
+function normalizePaint(paint: TextPaint): TextPaint {
+  if (paint.mode === "solid") {
+    return { mode: "solid", color: normalizeHex(paint.color) ?? "#ffffff" };
+  }
+
+  return {
+    mode: "gradient",
+    from: normalizeHex(paint.from) ?? "#ffffff",
+    to: normalizeHex(paint.to) ?? "#000000",
+    direction: paint.direction,
+  };
+}
+
+function getPalettePosition(button: HTMLButtonElement | null) {
+  if (!button) {
+    return {
+      position: "fixed" as const,
+      left: VIEWPORT_MARGIN,
+      top: VIEWPORT_MARGIN,
+      width: PALETTE_WIDTH,
+      maxHeight: `calc(100vh - ${VIEWPORT_MARGIN * 2}px)`,
+    };
+  }
+
+  const rect = button.getBoundingClientRect();
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+
+  const left = Math.min(
+    Math.max(VIEWPORT_MARGIN, rect.left),
+    Math.max(VIEWPORT_MARGIN, viewportWidth - PALETTE_WIDTH - VIEWPORT_MARGIN),
+  );
+
+  const spaceBelow = viewportHeight - rect.bottom - VIEWPORT_MARGIN;
+  const spaceAbove = rect.top - VIEWPORT_MARGIN;
+  const openAbove = spaceBelow < PALETTE_MIN_HEIGHT && spaceAbove > spaceBelow;
+  const top = openAbove
+    ? Math.max(VIEWPORT_MARGIN, rect.top - PALETTE_MIN_HEIGHT)
+    : Math.min(rect.bottom + 8, viewportHeight - PALETTE_MIN_HEIGHT - VIEWPORT_MARGIN);
+
+  const maxHeight = openAbove
+    ? Math.max(220, rect.top - VIEWPORT_MARGIN - 8)
+    : Math.max(220, viewportHeight - rect.bottom - VIEWPORT_MARGIN - 8);
+
+  return {
+    position: "fixed" as const,
+    left,
+    top,
+    width: PALETTE_WIDTH,
+    maxHeight,
+  };
 }
 
 export function ColorInput({ value, onChange, label }: ColorInputProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [draft, setDraft] = useState(value);
+  const [draft, setDraft] = useState<TextPaint>(normalizePaint(value));
   const [recentColors, setRecentColors] = useState<string[]>([]);
-  const [alignRight, setAlignRight] = useState(false);
+  const [gradientTarget, setGradientTarget] = useState<"from" | "to">("from");
+  const [paletteStyle, setPaletteStyle] = useState<CSSProperties>({});
   const wrapperRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
   useClickOutside(wrapperRef, () => setIsOpen(false));
 
   useEffect(() => {
-    setDraft(value);
+    setDraft(normalizePaint(value));
   }, [value]);
 
   useEffect(() => {
-    if (isOpen) setRecentColors(getRecentColors());
+    if (!isOpen) return;
+
+    const syncPalette = () => {
+      setRecentColors(getRecentColors());
+      setPaletteStyle(getPalettePosition(buttonRef.current));
+    };
+
+    syncPalette();
+    window.addEventListener("resize", syncPalette);
+    window.addEventListener("scroll", syncPalette, true);
+    return () => {
+      window.removeEventListener("resize", syncPalette);
+      window.removeEventListener("scroll", syncPalette, true);
+    };
   }, [isOpen]);
 
-  const commitColor = useCallback(
+  const activeSolidColor = useMemo(() => {
+    if (draft.mode === "solid") return draft.color;
+    return gradientTarget === "from" ? draft.from : draft.to;
+  }, [draft, gradientTarget]);
+
+  const persistRecentColors = useCallback((paint: TextPaint) => {
+    if (paint.mode === "solid") {
+      addRecentColor(paint.color);
+    } else {
+      addRecentColor(paint.from);
+      addRecentColor(paint.to);
+    }
+
+    setRecentColors(getRecentColors());
+  }, []);
+
+  const commitPaint = useCallback(
+    (next: TextPaint, close = false) => {
+      const normalized = normalizePaint(next);
+      onChange(normalized);
+      persistRecentColors(normalized);
+      setDraft(normalized);
+      if (close) setIsOpen(false);
+    },
+    [onChange, persistRecentColors],
+  );
+
+  const applyPresetColor = useCallback(
     (color: string) => {
       const normalized = normalizeHex(color);
       if (!normalized) return;
 
-      onChange(normalized);
-      addRecentColor(normalized);
-      setRecentColors(getRecentColors());
-      setIsOpen(false);
+      if (draft.mode === "solid") {
+        commitPaint({ mode: "solid", color: normalized }, true);
+        return;
+      }
+
+      commitPaint(
+        {
+          ...draft,
+          [gradientTarget]: normalized,
+        },
+        true,
+      );
     },
-    [onChange],
+    [commitPaint, draft, gradientTarget],
   );
 
+  const applyDraftAndClose = useCallback(() => {
+    if (draft.mode === "solid") {
+      const normalized = normalizeHex(draft.color);
+      if (!normalized) return;
+      commitPaint({ mode: "solid", color: normalized }, true);
+      return;
+    }
+
+    const from = normalizeHex(draft.from);
+    const to = normalizeHex(draft.to);
+    if (!from || !to) return;
+
+    commitPaint(
+      {
+        mode: "gradient",
+        from,
+        to,
+        direction: draft.direction,
+      },
+      true,
+    );
+  }, [commitPaint, draft]);
+
+  const updateDraftColor = useCallback((next: string) => {
+    setDraft((prev) =>
+      prev.mode === "solid" ? { mode: "solid", color: next } : { ...prev, [gradientTarget]: next },
+    );
+  }, [gradientTarget]);
+
   const openPalette = () => {
-    const rect = buttonRef.current?.getBoundingClientRect();
-    setAlignRight(Boolean(rect && rect.right + 320 > window.innerWidth));
+    setPaletteStyle(getPalettePosition(buttonRef.current));
     setIsOpen((open) => !open);
   };
 
-  const activeColor = normalizeHex(draft) ?? value;
-
   return (
-    <div ref={wrapperRef} className="relative flex min-w-36 items-center gap-2">
+    <div ref={wrapperRef} className="relative flex min-w-48 items-center gap-2">
+      <select
+        aria-label={`${label} 모드`}
+        value={draft.mode}
+        onChange={(event) => {
+          const mode = event.target.value as TextPaint["mode"];
+          if (mode === "solid") {
+            setDraft({ mode: "solid", color: activeSolidColor });
+            return;
+          }
+
+          setDraft({
+            mode: "gradient",
+            from: value.mode === "gradient" ? value.from : activeSolidColor,
+            to: value.mode === "gradient" ? value.to : "#ffffff",
+            direction: value.mode === "gradient" ? value.direction : "horizontal",
+          });
+        }}
+        className="h-9 rounded-md border border-zinc-300 bg-white px-2 text-sm outline-none focus:border-zinc-950"
+      >
+        <option value="solid">단색</option>
+        <option value="gradient">그라데이션</option>
+      </select>
+
       <input
         aria-label={label}
-        value={draft}
-        onChange={(event) => {
-          const next = event.target.value;
-          setDraft(next);
-          const normalized = normalizeHex(next);
-          if (normalized) onChange(normalized);
-        }}
-        onBlur={() => {
-          const normalized = normalizeHex(draft);
-          if (normalized) addRecentColor(normalized);
-          else setDraft(value);
-        }}
+        value={activeSolidColor}
+        onChange={(event) => updateDraftColor(event.target.value)}
         className="h-9 w-28 rounded-md border border-zinc-300 bg-white px-2 font-mono text-sm text-zinc-900 outline-none focus:border-zinc-950"
       />
+
       <button
         ref={buttonRef}
         type="button"
         aria-label={`${label} 팔레트 열기`}
         onClick={openPalette}
         className="h-7 w-7 rounded-md border border-zinc-300 transition hover:scale-110 hover:border-zinc-900"
-        style={{ backgroundColor: activeColor }}
+        style={createPaintPreviewStyle(draft)}
       />
+
       {isOpen ? (
         <div
-          className={[
-            "absolute top-11 z-40 w-80 rounded-md border border-zinc-200 bg-white p-4 text-zinc-950 shadow-xl",
-            alignRight ? "right-0" : "left-0",
-          ].join(" ")}
+          className="z-50 overflow-y-auto rounded-md border border-zinc-200 bg-white p-4 text-zinc-950 shadow-xl"
+          style={paletteStyle}
         >
+          {draft.mode === "gradient" ? (
+            <div className="mb-4 rounded-md border border-zinc-200 p-3">
+              <div className="mb-3 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setGradientTarget("from")}
+                  className={`rounded-md px-2 py-1 text-xs font-bold ${gradientTarget === "from" ? "bg-zinc-950 text-white" : "bg-zinc-100 text-zinc-700"}`}
+                >
+                  시작색
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setGradientTarget("to")}
+                  className={`rounded-md px-2 py-1 text-xs font-bold ${gradientTarget === "to" ? "bg-zinc-950 text-white" : "bg-zinc-100 text-zinc-700"}`}
+                >
+                  끝색
+                </button>
+                <select
+                  value={draft.direction}
+                  onChange={(event) =>
+                    setDraft((prev) =>
+                      prev.mode === "gradient"
+                        ? { ...prev, direction: event.target.value as GradientDirection }
+                        : prev,
+                    )
+                  }
+                  className="ml-auto h-8 rounded-md border border-zinc-300 bg-white px-2 text-xs outline-none focus:border-zinc-950"
+                >
+                  <option value="horizontal">가로</option>
+                  <option value="vertical">세로</option>
+                </select>
+              </div>
+              <div className="h-10 rounded-md border border-zinc-200" style={createPaintPreviewStyle(draft)} />
+            </div>
+          ) : null}
+
           <PaletteSection title="최근 사용 색상">
             {recentColors.length ? (
               recentColors.map((color) => (
-                <Swatch key={color} color={color} active={color === activeColor} onClick={commitColor} />
+                <Swatch key={color} color={color} active={color === activeSolidColor} onClick={applyPresetColor} />
               ))
             ) : (
               <p className="text-xs text-zinc-500">아직 선택한 색상이 없습니다.</p>
@@ -121,8 +318,8 @@ export function ColorInput({ value, onChange, label }: ColorInputProps) {
                 <Swatch
                   key={`${color}-${index}`}
                   color={color}
-                  active={color === activeColor}
-                  onClick={commitColor}
+                  active={color === activeSolidColor}
+                  onClick={applyPresetColor}
                 />
               ))}
             </div>
@@ -132,22 +329,19 @@ export function ColorInput({ value, onChange, label }: ColorInputProps) {
             <p className="mb-2 text-xs font-bold text-zinc-600">직접 입력</p>
             <div className="flex items-center gap-2">
               <input
-                value={draft}
-                onChange={(event) => setDraft(event.target.value)}
+                value={activeSolidColor}
+                onChange={(event) => updateDraftColor(event.target.value)}
                 className="h-9 flex-1 rounded-md border border-zinc-300 px-2 font-mono text-sm outline-none focus:border-zinc-950"
               />
               <input
                 type="color"
-                value={activeColor}
-                onChange={(event) => {
-                  setDraft(event.target.value);
-                  commitColor(event.target.value);
-                }}
+                value={normalizeHex(activeSolidColor) ?? "#ffffff"}
+                onChange={(event) => updateDraftColor(event.target.value)}
                 className="h-9 w-12 rounded-md border border-zinc-300 bg-white"
               />
               <button
                 type="button"
-                onClick={() => commitColor(draft)}
+                onClick={applyDraftAndClose}
                 className="h-9 rounded-md bg-zinc-950 px-3 text-sm font-bold text-white"
               >
                 적용
@@ -160,7 +354,7 @@ export function ColorInput({ value, onChange, label }: ColorInputProps) {
   );
 }
 
-function PaletteSection({ title, children }: { title: string; children: React.ReactNode }) {
+function PaletteSection({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="mt-1">
       <p className="mb-2 text-xs font-bold text-zinc-600">{title}</p>
@@ -187,7 +381,7 @@ function Swatch({
       style={{ backgroundColor: color }}
     >
       {active ? (
-        <span className="absolute inset-0 grid place-items-center text-xs font-black text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.9)]">
+        <span className="absolute inset-0 grid place-items-center text-[10px] font-black text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.9)]">
           ✓
         </span>
       ) : null}
