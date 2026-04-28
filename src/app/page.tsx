@@ -8,7 +8,7 @@ import { STYLE_PRESETS } from "@/lib/colorPresets";
 import { FONT_PRESETS } from "@/lib/fonts";
 import { renderFullMenuPng, renderReactionDataUrls } from "@/lib/renderer";
 import { savePreviewData } from "@/lib/storage";
-import { DEFAULT_COUNT_COLOR, DEFAULT_TEXT_COLOR, type TextPaint } from "@/lib/types";
+import { DEFAULT_COUNT_COLOR, DEFAULT_TEXT_COLOR, type ReactionItem, type TextPaint } from "@/lib/types";
 
 export default function Home() {
   const store = useReactionStore();
@@ -33,6 +33,17 @@ export default function Home() {
     verticalPadding: store.verticalPadding,
   } as const;
 
+  const applyPatchByScope = (patch: Partial<ReactionItem>, doneMessage: string) => {
+    if (store.selectedCount > 0) {
+      store.applyToSelected(patch);
+      setStatus(`${doneMessage} 선택 항목에 적용했습니다.`);
+      return;
+    }
+
+    store.applyToAll(patch);
+    setStatus(`${doneMessage} 전체 항목에 적용했습니다.`);
+  };
+
   const openPreview = async () => {
     setStatus("미리보기 생성 중...");
     store.saveAll();
@@ -56,18 +67,15 @@ export default function Home() {
   };
 
   const applyBulkCountColor = () => {
-    store.applyToSelected({ countColor: bulkCountColor });
-    setStatus("선택 항목에 개수 색상을 적용했습니다.");
+    applyPatchByScope({ countColor: bulkCountColor }, "개수 색상을");
   };
 
   const applyBulkTextColor = () => {
-    store.applyToSelected({ textColor: bulkTextColor });
-    setStatus("선택 항목에 텍스트 색상을 적용했습니다.");
+    applyPatchByScope({ textColor: bulkTextColor }, "텍스트 색상을");
   };
 
   const applyBulkBothColors = () => {
-    store.applyToSelected({ countColor: bulkCountColor, textColor: bulkTextColor });
-    setStatus("선택 항목에 색상 세트를 적용했습니다.");
+    applyPatchByScope({ countColor: bulkCountColor, textColor: bulkTextColor }, "색상 세트를");
   };
 
   const applyStylePreset = (presetId: string) => {
@@ -76,8 +84,7 @@ export default function Home() {
 
     setBulkCountColor(preset.countColor);
     setBulkTextColor(preset.textColor);
-    store.applyToSelected({ countColor: preset.countColor, textColor: preset.textColor });
-    setStatus(`${preset.label} 프리셋을 적용했습니다.`);
+    applyPatchByScope({ countColor: preset.countColor, textColor: preset.textColor }, `${preset.label} 프리셋을`);
   };
 
   if (!store.isLoaded) {
@@ -224,7 +231,9 @@ export default function Home() {
         </section>
 
         <details className="rounded-md border border-zinc-200 bg-white" open={false}>
-          <summary className="cursor-pointer px-4 py-3 text-sm font-bold text-zinc-800">상세 설정</summary>
+          <summary className="cursor-pointer px-4 py-3 text-sm font-bold text-zinc-800">
+            상세 설정 <span className="ml-2 text-xs font-medium text-zinc-500">* 웬만하면 건들지 마세요</span>
+          </summary>
           <div className="flex flex-wrap items-center gap-3 border-t border-zinc-200 px-4 py-4">
             <label className="flex items-center gap-2 text-sm font-bold text-zinc-700">
               최소 간격
@@ -275,19 +284,17 @@ export default function Home() {
         <section className="rounded-md border border-zinc-200 bg-white p-4">
           <div className="mb-3 flex flex-wrap items-center gap-3">
             <h2 className="text-sm font-black text-zinc-900">색상 일괄 적용</h2>
-            <span className="text-sm text-zinc-500">선택 항목 {store.selectedCount}개</span>
+            <span className="text-sm text-zinc-500">
+              선택 항목 {store.selectedCount}개{store.selectedCount === 0 ? " / 선택 없으면 전체 적용" : ""}
+            </span>
           </div>
+          <p className="mb-4 text-sm text-zinc-500">* 숫자는 세로, 리액션은 가로 그라데이션이 이쁨</p>
 
           <div className="mb-4 grid gap-4 xl:grid-cols-[1fr_1fr_auto]">
             <div className="flex flex-wrap items-center gap-3">
               <span className="text-sm font-bold text-zinc-700">개수 색상</span>
               <ColorInput label="일괄 개수 색상" value={bulkCountColor} onChange={setBulkCountColor} />
-              <button
-                type="button"
-                disabled={store.selectedCount === 0}
-                onClick={applyBulkCountColor}
-                className="button-secondary disabled:cursor-not-allowed disabled:opacity-45"
-              >
+              <button type="button" onClick={applyBulkCountColor} className="button-secondary">
                 개수만 적용
               </button>
             </div>
@@ -295,23 +302,13 @@ export default function Home() {
             <div className="flex flex-wrap items-center gap-3">
               <span className="text-sm font-bold text-zinc-700">텍스트 색상</span>
               <ColorInput label="일괄 텍스트 색상" value={bulkTextColor} onChange={setBulkTextColor} />
-              <button
-                type="button"
-                disabled={store.selectedCount === 0}
-                onClick={applyBulkTextColor}
-                className="button-secondary disabled:cursor-not-allowed disabled:opacity-45"
-              >
+              <button type="button" onClick={applyBulkTextColor} className="button-secondary">
                 텍스트만 적용
               </button>
             </div>
 
             <div className="flex items-center">
-              <button
-                type="button"
-                disabled={store.selectedCount === 0}
-                onClick={applyBulkBothColors}
-                className="button-primary disabled:cursor-not-allowed disabled:opacity-45"
-              >
+              <button type="button" onClick={applyBulkBothColors} className="button-primary">
                 둘 다 적용
               </button>
             </div>
@@ -322,13 +319,28 @@ export default function Home() {
               <button
                 key={preset.id}
                 type="button"
-                disabled={store.selectedCount === 0}
                 onClick={() => applyStylePreset(preset.id)}
-                className="flex items-center gap-2 rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm font-bold text-zinc-800 hover:border-zinc-950 disabled:cursor-not-allowed disabled:opacity-45"
+                className="flex items-center gap-2 rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm font-bold text-zinc-800 hover:border-zinc-950"
               >
                 <span className="flex gap-1">
-                  <span className="h-5 w-5 rounded border border-zinc-300" style={{ background: preset.countColor.mode === "solid" ? preset.countColor.color : `linear-gradient(${preset.countColor.direction === "vertical" ? "180deg" : "90deg"}, ${preset.countColor.from}, ${preset.countColor.to})` }} />
-                  <span className="h-5 w-5 rounded border border-zinc-300" style={{ background: preset.textColor.mode === "solid" ? preset.textColor.color : `linear-gradient(${preset.textColor.direction === "vertical" ? "180deg" : "90deg"}, ${preset.textColor.from}, ${preset.textColor.to})` }} />
+                  <span
+                    className="h-5 w-5 rounded border border-zinc-300"
+                    style={{
+                      background:
+                        preset.countColor.mode === "solid"
+                          ? preset.countColor.color
+                          : `linear-gradient(${preset.countColor.direction === "vertical" ? "180deg" : "90deg"}, ${preset.countColor.from}, ${preset.countColor.to})`,
+                    }}
+                  />
+                  <span
+                    className="h-5 w-5 rounded border border-zinc-300"
+                    style={{
+                      background:
+                        preset.textColor.mode === "solid"
+                          ? preset.textColor.color
+                          : `linear-gradient(${preset.textColor.direction === "vertical" ? "180deg" : "90deg"}, ${preset.textColor.from}, ${preset.textColor.to})`,
+                    }}
+                  />
                 </span>
                 {preset.label}
               </button>

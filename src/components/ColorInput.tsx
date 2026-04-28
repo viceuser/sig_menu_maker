@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useClickOutside } from "@/hooks/useClickOutside";
-import { PAINT_PRESETS } from "@/lib/colorPresets";
 import { addRecentColor, getRecentColors, normalizeHex } from "@/lib/recentColors";
 import type { GradientDirection, TextPaint } from "@/lib/types";
 
@@ -322,22 +321,6 @@ export function ColorInput({ value, onChange, label }: ColorInputProps) {
                   active={color === activeSolidColor}
                   onClick={applyPresetColor}
                 />
-              ))}
-            </div>
-          </PaletteSection>
-
-          <PaletteSection title="컬러/그라데이션 프리셋">
-            <div className="grid grid-cols-2 gap-2">
-              {PAINT_PRESETS.map((preset) => (
-                <button
-                  key={preset.id}
-                  type="button"
-                  onClick={() => commitPaint(preset.paint, true)}
-                  className="flex items-center gap-2 rounded-md border border-zinc-200 px-2 py-2 text-left text-xs font-bold text-zinc-700 hover:border-zinc-900"
-                >
-                  <span className="h-6 w-6 rounded border border-zinc-300" style={createPaintPreviewStyle(preset.paint)} />
-                  <span>{preset.label}</span>
-                </button>
               ))}
             </div>
           </PaletteSection>

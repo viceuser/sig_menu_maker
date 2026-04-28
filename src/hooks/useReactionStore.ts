@@ -94,6 +94,10 @@ export function useReactionStore() {
     setItems((prev) => prev.map((item) => (selectedIds.has(item.id) ? { ...item, ...patch } : item)));
   }, [selectedIds]);
 
+  const applyToAll = useCallback((patch: Partial<ReactionItem>) => {
+    setItems((prev) => prev.map((item) => ({ ...item, ...patch })));
+  }, []);
+
   const deleteSelected = useCallback(() => {
     setItems((prev) => prev.filter((item) => !selectedIds.has(item.id)));
     setSelectedIds(new Set());
@@ -191,6 +195,7 @@ export function useReactionStore() {
       addItem,
       updateItem,
       applyToSelected,
+      applyToAll,
       deleteSelected,
       toggleSelected,
       toggleAll,
@@ -225,6 +230,7 @@ export function useReactionStore() {
       toggleSelected,
       updateItem,
       applyToSelected,
+      applyToAll,
       verticalPadding,
     ],
   );
