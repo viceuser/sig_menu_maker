@@ -28,6 +28,9 @@ function createItem(): ReactionItem {
     text: "",
     countColor: DEFAULT_COUNT_COLOR,
     textColor: DEFAULT_TEXT_COLOR,
+    isNew: false,
+    isUpdate: false,
+    isHot: false,
   };
 }
 
@@ -85,6 +88,11 @@ export function useReactionStore() {
   const updateItem = useCallback((id: string, patch: Partial<ReactionItem>) => {
     setItems((prev) => prev.map((item) => (item.id === id ? { ...item, ...patch } : item)));
   }, []);
+
+  const applyToSelected = useCallback((patch: Partial<ReactionItem>) => {
+    if (selectedIds.size === 0) return;
+    setItems((prev) => prev.map((item) => (selectedIds.has(item.id) ? { ...item, ...patch } : item)));
+  }, [selectedIds]);
 
   const deleteSelected = useCallback(() => {
     setItems((prev) => prev.filter((item) => !selectedIds.has(item.id)));
@@ -182,6 +190,7 @@ export function useReactionStore() {
       setVerticalPadding,
       addItem,
       updateItem,
+      applyToSelected,
       deleteSelected,
       toggleSelected,
       toggleAll,
@@ -215,6 +224,7 @@ export function useReactionStore() {
       toggleAll,
       toggleSelected,
       updateItem,
+      applyToSelected,
       verticalPadding,
     ],
   );

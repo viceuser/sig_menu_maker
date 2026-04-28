@@ -7,6 +7,13 @@ const FULL_MENU_COLUMN_GAP = 16;
 
 const COUNT_SLOT_SIDE_PADDING = 6;
 const MIN_COUNT_DIGITS = "00000";
+const BADGE_GAP = 8;
+
+const BADGE_STYLES = {
+  NEW: { label: "NEW", color: "#00c853" },
+  UPDATE: { label: "UPDATE", color: "#2979ff" },
+  HOT: { label: "HOT", color: "#f44336" },
+} as const;
 
 interface RenderOptions {
   itemsPerPage: number;
@@ -114,6 +121,68 @@ function drawTextWithStroke(
   ctx.textAlign = "left";
 }
 
+function getBadgeDefinitions(item: ReactionItem) {
+  return [
+    item.isNew ? BADGE_STYLES.NEW : null,
+    item.isUpdate ? BADGE_STYLES.UPDATE : null,
+    item.isHot ? BADGE_STYLES.HOT : null,
+  ].filter(Boolean) as Array<(typeof BADGE_STYLES)[keyof typeof BADGE_STYLES]>;
+}
+
+function getBadgeMetrics(ctx: CanvasRenderingContext2D, item: ReactionItem) {
+  ctx.save();
+  ctx.font = "800 14px sans-serif";
+  const badges = getBadgeDefinitions(item).map((badge) => {
+    const textWidth = ctx.measureText(badge.label).width;
+    return {
+      ...badge,
+      width: Math.ceil(textWidth + 18),
+      height: 22,
+    };
+  });
+  ctx.restore();
+
+  const totalWidth = badges.reduce((sum, badge, index) => sum + badge.width + (index > 0 ? 6 : 0), 0);
+  return { badges, totalWidth };
+}
+
+function drawBadges(ctx: CanvasRenderingContext2D, x: number, centerY: number, item: ReactionItem) {
+  const { badges } = getBadgeMetrics(ctx, item);
+  if (badges.length === 0) return 0;
+
+  ctx.save();
+  ctx.font = "800 14px sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+
+  let currentX = x;
+  badges.forEach((badge, index) => {
+    const top = centerY - badge.height / 2;
+    const radius = 6;
+
+    ctx.fillStyle = badge.color;
+    ctx.beginPath();
+    ctx.moveTo(currentX + radius, top);
+    ctx.lineTo(currentX + badge.width - radius, top);
+    ctx.quadraticCurveTo(currentX + badge.width, top, currentX + badge.width, top + radius);
+    ctx.lineTo(currentX + badge.width, top + badge.height - radius);
+    ctx.quadraticCurveTo(currentX + badge.width, top + badge.height, currentX + badge.width - radius, top + badge.height);
+    ctx.lineTo(currentX + radius, top + badge.height);
+    ctx.quadraticCurveTo(currentX, top + badge.height, currentX, top + badge.height - radius);
+    ctx.lineTo(currentX, top + radius);
+    ctx.quadraticCurveTo(currentX, top, currentX + radius, top);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(badge.label, currentX + badge.width / 2, centerY + 0.5);
+    currentX += badge.width + (index < badges.length - 1 ? 6 : 0);
+  });
+
+  ctx.restore();
+  return badges.reduce((sum, badge, index) => sum + badge.width + (index > 0 ? 6 : 0), 0);
+}
+
 function getCountSlotWidth(ctx: CanvasRenderingContext2D, countText: string) {
   const minimumWidth = ctx.measureText(MIN_COUNT_DIGITS).width;
   const countWidth = ctx.measureText(countText).width;
@@ -159,19 +228,26 @@ function drawLeftExampleRow(
   gapBase: number,
   gapMax: number,
 ) {
+  const { totalWidth: badgeTotalWidth } = getBadgeMetrics(ctx, item);
   ctx.font = `800 28px ${fontFamily}`;
   const countText = String(item.count);
   const countLeft = CANVAS_PADDING_X;
   const countWidth = ctx.measureText(countText).width;
   const adaptiveGap = getAdaptiveGap(ctx, countText, item.text.trim(), gapMin, gapBase, gapMax);
   const textLeft = countLeft + countWidth + COUNT_SLOT_SIDE_PADDING + adaptiveGap;
-  const maxTextWidth = Math.max(40, CANVAS_WIDTH - CANVAS_PADDING_X - textLeft);
+  const textRightLimit =
+    CANVAS_WIDTH - CANVAS_PADDING_X - (badgeTotalWidth > 0 ? badgeTotalWidth + BADGE_GAP : 0);
+  const maxTextWidth = Math.max(40, textRightLimit - textLeft);
 
   drawTextWithStroke(ctx, countText, countLeft, centerY, item.countColor, "left", strokeWidth);
 
   ctx.font = `500 26px ${fontFamily}`;
   const safeText = fitText(ctx, item.text.trim() || "REACTION", maxTextWidth);
   drawTextWithStroke(ctx, safeText, textLeft, centerY, item.textColor, "left", strokeWidth);
+
+  if (badgeTotalWidth > 0) {
+    drawBadges(ctx, CANVAS_WIDTH - CANVAS_PADDING_X - badgeTotalWidth, centerY, item);
+  }
 }
 
 function drawRightExampleRow(
@@ -184,13 +260,19 @@ function drawRightExampleRow(
   gapBase: number,
   gapMax: number,
 ) {
+  const { totalWidth: badgeTotalWidth } = getBadgeMetrics(ctx, item);
   ctx.font = `800 28px ${fontFamily}`;
   const countText = String(item.count);
   const countWidth = ctx.measureText(countText).width;
   const adaptiveGap = getAdaptiveGap(ctx, countText, item.text.trim(), gapMin, gapBase, gapMax);
   const countRight = CANVAS_WIDTH - CANVAS_PADDING_X;
   const textRight = countRight - countWidth - COUNT_SLOT_SIDE_PADDING - adaptiveGap;
-  const maxTextWidth = Math.max(40, textRight - CANVAS_PADDING_X);
+  const textLeftLimit = CANVAS_PADDING_X + (badgeTotalWidth > 0 ? badgeTotalWidth + BADGE_GAP : 0);
+  const maxTextWidth = Math.max(40, textRight - textLeftLimit);
+
+  if (badgeTotalWidth > 0) {
+    drawBadges(ctx, CANVAS_PADDING_X, centerY, item);
+  }
 
   drawTextWithStroke(ctx, countText, countRight, centerY, item.countColor, "right", strokeWidth);
 

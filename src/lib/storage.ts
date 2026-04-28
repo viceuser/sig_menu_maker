@@ -89,6 +89,9 @@ function normalizeItem(value: unknown): ReactionItem | null {
     text: candidate.text,
     countColor: normalizePaint(candidate.countColor, DEFAULT_COUNT_COLOR),
     textColor: normalizePaint(candidate.textColor, DEFAULT_TEXT_COLOR),
+    isNew: Boolean(candidate.isNew),
+    isUpdate: Boolean(candidate.isUpdate),
+    isHot: Boolean(candidate.isHot),
   };
 }
 

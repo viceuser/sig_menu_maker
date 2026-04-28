@@ -18,6 +18,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import type { ReactNode } from "react";
 import type { ReactionItem } from "@/lib/types";
+import { BadgeToggle } from "./BadgeToggle";
 import { ColorInput } from "./ColorInput";
 
 interface ReactionTableProps {
@@ -52,7 +53,7 @@ export function ReactionTable({
   return (
     <div className="overflow-x-auto border-y border-zinc-200">
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-        <table className="w-full min-w-[1080px] border-collapse text-left text-sm">
+        <table className="w-full min-w-[1320px] border-collapse text-left text-sm">
           <thead className="bg-zinc-100 text-xs font-bold uppercase text-zinc-600">
             <tr>
               <Th className="w-12 text-center">Drag</Th>
@@ -68,6 +69,9 @@ export function ReactionTable({
               </Th>
               <Th className="w-36">리액션 개수</Th>
               <Th>리액션 텍스트</Th>
+              <Th className="w-24 text-center">NEW</Th>
+              <Th className="w-24 text-center">UPDATE</Th>
+              <Th className="w-24 text-center">HOT</Th>
               <Th className="w-[280px]">개수 색상</Th>
               <Th className="w-[280px]">텍스트 색상</Th>
             </tr>
@@ -88,6 +92,7 @@ export function ReactionTable({
           </SortableContext>
         </table>
       </DndContext>
+
       {items.length === 0 ? (
         <div className="grid min-h-40 place-items-center bg-white text-sm text-zinc-500">
           + 추가로 첫 리액션을 만들어 주세요.
@@ -113,6 +118,7 @@ function ReactionRow({
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: item.id,
   });
+
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
@@ -135,7 +141,7 @@ function ReactionRow({
           {...attributes}
           {...listeners}
         >
-          ⠿
+          ≡
         </button>
       </Td>
       <Td className="text-center font-mono text-zinc-500">{index + 1}</Td>
@@ -164,6 +170,19 @@ function ReactionRow({
           placeholder="리액션 이름"
           className="h-9 w-full min-w-48 rounded-md border border-zinc-300 px-3 outline-none focus:border-zinc-950"
         />
+      </Td>
+      <Td className="text-center">
+        <BadgeToggle label="NEW" checked={item.isNew} onChange={(isNew) => onUpdateItem(item.id, { isNew })} />
+      </Td>
+      <Td className="text-center">
+        <BadgeToggle
+          label="UPDATE"
+          checked={item.isUpdate}
+          onChange={(isUpdate) => onUpdateItem(item.id, { isUpdate })}
+        />
+      </Td>
+      <Td className="text-center">
+        <BadgeToggle label="HOT" checked={item.isHot} onChange={(isHot) => onUpdateItem(item.id, { isHot })} />
       </Td>
       <Td>
         <ColorInput

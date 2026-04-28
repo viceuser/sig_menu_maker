@@ -20,6 +20,9 @@ export interface ReactionItem {
   text: string;
   countColor: TextPaint;
   textColor: TextPaint;
+  isNew: boolean;
+  isUpdate: boolean;
+  isHot: boolean;
 }
 
 export type ContentAlign = "left" | "right";
