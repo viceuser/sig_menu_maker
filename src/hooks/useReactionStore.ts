@@ -3,11 +3,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { arrayMove } from "@dnd-kit/sortable";
 import { v4 as uuidv4 } from "uuid";
-import { DEFAULT_FONT_PRESET, type FontPresetId } from "@/lib/fonts";
+import { createCustomBadge } from "@/lib/badges";
+import { DEFAULT_FONT_PRESET, isFontPresetId, type FontPresetId } from "@/lib/fonts";
 import {
   DEFAULT_CONTENT_ALIGN,
   DEFAULT_COUNT_COLOR,
   DEFAULT_FADE_INTERVAL,
+  DEFAULT_FONT_SIZE,
   DEFAULT_GAP_BASE,
   DEFAULT_GAP_MAX,
   DEFAULT_GAP_MIN,
@@ -21,24 +23,31 @@ import {
 } from "@/lib/types";
 import { loadMenuConfig, saveConfig, saveItems, saveMenuConfig } from "@/lib/storage";
 
-function createItem(): ReactionItem {
+export function createReactionItem(): ReactionItem {
   return {
     id: uuidv4(),
-    count: 0,
+    rowType: "normal",
+    count: null,
     text: "",
     countColor: DEFAULT_COUNT_COLOR,
     textColor: DEFAULT_TEXT_COLOR,
-    isNew: false,
-    isUpdate: false,
-    isHot: false,
+    badges: [],
+  };
+}
+
+export function createCenterTextItem(text = ""): ReactionItem {
+  return {
+    ...createReactionItem(),
+    rowType: "centerText",
+    text,
   };
 }
 
 function createSamples(): ReactionItem[] {
   return [
-    { ...createItem(), count: 1000, text: "샘플 리액션 1" },
-    { ...createItem(), count: 3000, text: "샘플 리액션 2" },
-    { ...createItem(), count: 5000, text: "샘플 리액션 3" },
+    { ...createReactionItem(), count: 1000, text: "Sample Reaction 1", badges: [createCustomBadge()] },
+    { ...createReactionItem(), count: 3000, text: "Sample Reaction 2" },
+    { ...createReactionItem(), count: 5000, text: "Sample Reaction 3" },
   ];
 }
 
@@ -48,6 +57,7 @@ export function useReactionStore() {
   const [itemsPerPage, setItemsPerPage] = useState(DEFAULT_ITEMS_PER_PAGE);
   const [fadeInterval, setFadeInterval] = useState(DEFAULT_FADE_INTERVAL);
   const [fontPreset, setFontPreset] = useState<FontPresetId>(DEFAULT_FONT_PRESET);
+  const [fontSize, setFontSize] = useState(DEFAULT_FONT_SIZE);
   const [contentAlign, setContentAlign] = useState<ContentAlign>(DEFAULT_CONTENT_ALIGN);
   const [strokeWidth, setStrokeWidth] = useState(DEFAULT_STROKE_WIDTH);
   const [gapMin, setGapMin] = useState(DEFAULT_GAP_MIN);
@@ -60,10 +70,12 @@ export function useReactionStore() {
   const reload = useCallback(() => {
     const config = loadMenuConfig();
     const loadedItems = config.items.length ? config.items : createSamples();
+
     setItems(loadedItems);
     setItemsPerPage(config.itemsPerPage || DEFAULT_ITEMS_PER_PAGE);
     setFadeInterval(config.fadeInterval || DEFAULT_FADE_INTERVAL);
-    setFontPreset(config.fontPreset as FontPresetId);
+    setFontPreset(isFontPresetId(config.fontPreset) ? config.fontPreset : DEFAULT_FONT_PRESET);
+    setFontSize(config.fontSize || DEFAULT_FONT_SIZE);
     setContentAlign(config.contentAlign);
     setStrokeWidth(config.strokeWidth || DEFAULT_STROKE_WIDTH);
     setGapMin(config.gapMin || DEFAULT_GAP_MIN);
@@ -82,17 +94,24 @@ export function useReactionStore() {
   }, [reload]);
 
   const addItem = useCallback(() => {
-    setItems((prev) => [...prev, createItem()]);
+    setItems((prev) => [...prev, createReactionItem()]);
+  }, []);
+
+  const addCenterTextItem = useCallback((text = "") => {
+    setItems((prev) => [...prev, createCenterTextItem(text)]);
   }, []);
 
   const updateItem = useCallback((id: string, patch: Partial<ReactionItem>) => {
     setItems((prev) => prev.map((item) => (item.id === id ? { ...item, ...patch } : item)));
   }, []);
 
-  const applyToSelected = useCallback((patch: Partial<ReactionItem>) => {
-    if (selectedIds.size === 0) return;
-    setItems((prev) => prev.map((item) => (selectedIds.has(item.id) ? { ...item, ...patch } : item)));
-  }, [selectedIds]);
+  const applyToSelected = useCallback(
+    (patch: Partial<ReactionItem>) => {
+      if (selectedIds.size === 0) return;
+      setItems((prev) => prev.map((item) => (selectedIds.has(item.id) ? { ...item, ...patch } : item)));
+    },
+    [selectedIds],
+  );
 
   const applyToAll = useCallback((patch: Partial<ReactionItem>) => {
     setItems((prev) => prev.map((item) => ({ ...item, ...patch })));
@@ -102,6 +121,21 @@ export function useReactionStore() {
     setItems((prev) => prev.filter((item) => !selectedIds.has(item.id)));
     setSelectedIds(new Set());
   }, [selectedIds]);
+
+  const replaceItems = useCallback((nextItems: ReactionItem[]) => {
+    setItems(nextItems);
+    setSelectedIds(new Set());
+    saveItems(nextItems);
+  }, []);
+
+  const appendItems = useCallback((nextItems: ReactionItem[]) => {
+    setItems((prev) => {
+      const merged = [...prev, ...nextItems];
+      saveItems(merged);
+      return merged;
+    });
+    setSelectedIds(new Set());
+  }, []);
 
   const toggleSelected = useCallback((id: string) => {
     setSelectedIds((prev) => {
@@ -134,6 +168,7 @@ export function useReactionStore() {
       itemsPerPage,
       fadeInterval,
       fontPreset,
+      fontSize,
       contentAlign,
       strokeWidth,
       gapMin,
@@ -142,13 +177,27 @@ export function useReactionStore() {
       rowHeight,
       verticalPadding,
     });
-  }, [contentAlign, fadeInterval, fontPreset, gapBase, gapMax, gapMin, items, itemsPerPage, rowHeight, strokeWidth, verticalPadding]);
+  }, [
+    contentAlign,
+    fadeInterval,
+    fontPreset,
+    fontSize,
+    gapBase,
+    gapMax,
+    gapMin,
+    items,
+    itemsPerPage,
+    rowHeight,
+    strokeWidth,
+    verticalPadding,
+  ]);
 
   const saveSettings = useCallback(() => {
     saveConfig({
       itemsPerPage,
       fadeInterval,
       fontPreset,
+      fontSize,
       contentAlign,
       strokeWidth,
       gapMin,
@@ -157,7 +206,19 @@ export function useReactionStore() {
       rowHeight,
       verticalPadding,
     });
-  }, [contentAlign, fadeInterval, fontPreset, gapBase, gapMax, gapMin, itemsPerPage, rowHeight, strokeWidth, verticalPadding]);
+  }, [
+    contentAlign,
+    fadeInterval,
+    fontPreset,
+    fontSize,
+    gapBase,
+    gapMax,
+    gapMin,
+    itemsPerPage,
+    rowHeight,
+    strokeWidth,
+    verticalPadding,
+  ]);
 
   const saveOnlyItems = useCallback(() => {
     saveItems(items);
@@ -172,6 +233,7 @@ export function useReactionStore() {
       itemsPerPage,
       fadeInterval,
       fontPreset,
+      fontSize,
       contentAlign,
       strokeWidth,
       gapMin,
@@ -185,6 +247,7 @@ export function useReactionStore() {
       setItemsPerPage,
       setFadeInterval,
       setFontPreset,
+      setFontSize,
       setContentAlign,
       setStrokeWidth,
       setGapMin,
@@ -193,10 +256,13 @@ export function useReactionStore() {
       setRowHeight,
       setVerticalPadding,
       addItem,
+      addCenterTextItem,
       updateItem,
       applyToSelected,
       applyToAll,
       deleteSelected,
+      replaceItems,
+      appendItems,
       toggleSelected,
       toggleAll,
       moveItem,
@@ -207,20 +273,26 @@ export function useReactionStore() {
     }),
     [
       addItem,
+      addCenterTextItem,
       allSelected,
+      applyToAll,
+      applyToSelected,
+      appendItems,
       contentAlign,
       deleteSelected,
       fadeInterval,
       fontPreset,
+      fontSize,
       gapBase,
       gapMax,
       gapMin,
       isLoaded,
       items,
       itemsPerPage,
-      rowHeight,
       moveItem,
       reload,
+      replaceItems,
+      rowHeight,
       saveAll,
       saveOnlyItems,
       saveSettings,
@@ -229,8 +301,6 @@ export function useReactionStore() {
       toggleAll,
       toggleSelected,
       updateItem,
-      applyToSelected,
-      applyToAll,
       verticalPadding,
     ],
   );

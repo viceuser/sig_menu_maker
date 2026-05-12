@@ -38,19 +38,28 @@ export default function PreviewPage() {
   }, []);
 
   useEffect(() => {
-    if (!data || data.pages.length <= 1) return;
+    if (!data || data.pages.length === 0) return;
+
+    const logicalPageDuration = Math.max(1000, data.frameDurationMs);
+    const logicalPageCount = Math.max(1, data.pageCount);
 
     const timer = window.setInterval(() => {
-      setPageIndex((index) => (index + 1) % data.pages.length);
-    }, data.frameDurationMs);
+      setPageIndex((index) => (index + 1) % logicalPageCount);
+    }, logicalPageDuration);
 
     return () => window.clearInterval(timer);
   }, [data]);
 
   const pageLabel = useMemo(() => {
     if (!data?.pageCount) return "0 / 0";
-    return `${(pageIndex % data.pageCount) + 1} / ${data.pageCount}`;
+    return `${pageIndex + 1} / ${data.pageCount}`;
   }, [data?.pageCount, pageIndex]);
+
+  const currentPage = useMemo(() => {
+    if (!data || data.pages.length === 0) return "";
+    const safePageIndex = Math.min(pageIndex, Math.max(0, data.pages.length - 1));
+    return data.pages[safePageIndex] ?? data.pages[0];
+  }, [data, pageIndex]);
 
   const saveGif = async () => {
     if (!data) return;
@@ -96,18 +105,13 @@ export default function PreviewPage() {
         className="relative grid max-h-[78vh] w-full place-items-center"
         style={{ aspectRatio: `${data.width} / ${data.height}` }}
       >
-        {data.pages.map((page, index) => (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            key={`${page}-${index}`}
-            src={page}
-            alt={`리액션 메뉴 ${index + 1}`}
-            className={[
-              "absolute max-h-full max-w-full object-contain opacity-0 transition-opacity duration-[800ms] ease-in-out",
-              index === pageIndex ? "opacity-100" : "",
-            ].join(" ")}
-          />
-        ))}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          key={currentPage}
+          src={currentPage}
+          alt={`reaction menu page ${pageIndex + 1}`}
+          className="absolute max-h-full max-w-full object-contain"
+        />
       </div>
 
       <footer className="flex flex-wrap items-center justify-center gap-3">

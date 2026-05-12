@@ -1,5 +1,6 @@
 import { getFontPreset, type FontPresetId } from "./fonts";
-import type { ContentAlign, TextPaint, ReactionItem } from "./types";
+import { getBadgeDisplayText } from "./badges";
+import type { BadgeConfig, ContentAlign, TextPaint, ReactionItem } from "./types";
 
 export const CANVAS_WIDTH = 720;
 export const CANVAS_PADDING_X = 34;
@@ -7,15 +8,11 @@ const FULL_MENU_COLUMN_GAP = 16;
 
 const COUNT_SLOT_SIDE_PADDING = 6;
 const MIN_COUNT_DIGITS = "00000";
-const BADGE_STYLES = {
-  NEW: { label: "NEW", color: "#00c853" },
-  UPDATE: { label: "UPDATE", color: "#2979ff" },
-  HOT: { label: "HOT", color: "#f44336" },
-} as const;
-
 interface RenderOptions {
   itemsPerPage: number;
+  fadeIntervalMs?: number;
   fontPreset: FontPresetId;
+  fontSize: number;
   contentAlign: ContentAlign;
   strokeWidth: number;
   gapMin: number;
@@ -30,6 +27,11 @@ interface CropBounds {
   top: number;
   right: number;
   bottom: number;
+}
+
+interface CenterLineBounds {
+  left: number;
+  right: number;
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -77,6 +79,14 @@ function getTextBounds(x: number, y: number, width: number, align: CanvasTextAli
   }
 
   return { left: x, right: x + width, top: y - 22, bottom: y + 22 };
+}
+
+function getCountFontSize(fontSize: number) {
+  return fontSize + 2;
+}
+
+function getCountText(count: ReactionItem["count"]) {
+  return typeof count === "number" && Number.isFinite(count) ? String(count) : "";
 }
 
 function createPaintStyle(
@@ -129,30 +139,126 @@ function drawTextWithStroke(
   ctx.textAlign = "left";
 }
 
-function getBadgeDefinitions(item: ReactionItem) {
-  return [
-    item.isNew ? BADGE_STYLES.NEW : null,
-    item.isUpdate ? BADGE_STYLES.UPDATE : null,
-    item.isHot ? BADGE_STYLES.HOT : null,
-  ].filter(Boolean) as Array<(typeof BADGE_STYLES)[keyof typeof BADGE_STYLES]>;
-}
-
 function getBadgeGap(baseGap: number) {
   return Math.max(2, Math.round(baseGap));
 }
 
-function getBadgeMetrics(ctx: CanvasRenderingContext2D, item: ReactionItem, baseGap: number) {
+function getBadgeSizeMetrics(size: BadgeConfig["size"]) {
+  if (size === "sm") {
+    return {
+      fontSize: 11,
+      fontWeight: 800,
+      horizontalPadding: 7,
+      height: 20,
+      strokeWidth: 1.2,
+    };
+  }
+
+  if (size === "lg") {
+    return {
+      fontSize: 15,
+      fontWeight: 800,
+      horizontalPadding: 11,
+      height: 28,
+      strokeWidth: 1.8,
+    };
+  }
+
+  return {
+    fontSize: 13,
+    fontWeight: 800,
+    horizontalPadding: 9,
+    height: 24,
+    strokeWidth: 1.5,
+  };
+}
+
+function drawRoundedRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number,
+) {
+  const safeRadius = Math.min(radius, width / 2, height / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + safeRadius, y);
+  ctx.lineTo(x + width - safeRadius, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + safeRadius);
+  ctx.lineTo(x + width, y + height - safeRadius);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - safeRadius, y + height);
+  ctx.lineTo(x + safeRadius, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - safeRadius);
+  ctx.lineTo(x, y + safeRadius);
+  ctx.quadraticCurveTo(x, y, x + safeRadius, y);
+  ctx.closePath();
+}
+
+function getBadgeRadius(badge: BadgeConfig, height: number) {
+  if (badge.shape === "pill") return height / 2;
+  if (badge.shape === "ribbon") return 4;
+  if (badge.shape === "rectangle") return 4;
+  return 6;
+}
+
+function drawRibbonBadge(ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number) {
+  const notch = Math.min(12, Math.max(8, Math.round(width * 0.16)));
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.lineTo(x + width - notch, y);
+  ctx.lineTo(x + width, y + height / 2);
+  ctx.lineTo(x + width - notch, y + height);
+  ctx.lineTo(x, y + height);
+  ctx.closePath();
+}
+
+function createBadgeFillStyle(
+  ctx: CanvasRenderingContext2D,
+  badge: BadgeConfig,
+  left: number,
+  top: number,
+  width: number,
+  height: number,
+) {
+  if (badge.fill.mode === "solid") {
+    return badge.fill.color;
+  }
+
+  const gradient =
+    badge.fill.direction === "vertical"
+      ? ctx.createLinearGradient(left, top, left, top + height)
+      : ctx.createLinearGradient(left, top, left + width, top);
+
+  gradient.addColorStop(0, badge.fill.from);
+  gradient.addColorStop(1, badge.fill.to);
+  return gradient;
+}
+
+function getBadgeMetrics(
+  ctx: CanvasRenderingContext2D,
+  item: ReactionItem,
+  baseGap: number,
+) {
   const badgeGap = getBadgeGap(baseGap);
   ctx.save();
-  ctx.font = "800 14px sans-serif";
-  const badges = getBadgeDefinitions(item).map((badge) => {
-    const textWidth = ctx.measureText(badge.label).width;
+  const badges = item.badges
+    .map((badge) => {
+    const sizeMetrics = getBadgeSizeMetrics(badge.size);
+    ctx.font =
+      badge.tone === "retro"
+        ? `${sizeMetrics.fontWeight} ${sizeMetrics.fontSize}px ui-monospace, monospace`
+        : `${sizeMetrics.fontWeight} ${sizeMetrics.fontSize}px sans-serif`;
+    const textWidth = ctx.measureText(getBadgeDisplayText(badge)).width;
     return {
       ...badge,
-      width: Math.ceil(textWidth + 18),
-      height: 22,
+      width: Math.ceil(textWidth + sizeMetrics.horizontalPadding * 2),
+      height: sizeMetrics.height,
+      fontSize: sizeMetrics.fontSize,
+      fontWeight: sizeMetrics.fontWeight,
+      strokeWidth: sizeMetrics.strokeWidth,
     };
-  });
+    });
   ctx.restore();
 
   const totalWidth = badges.reduce((sum, badge, index) => sum + badge.width + (index > 0 ? badgeGap : 0), 0);
@@ -170,31 +276,45 @@ function drawBadges(
   if (badges.length === 0) return 0;
 
   ctx.save();
-  ctx.font = "800 14px sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
 
   let currentX = x;
   badges.forEach((badge, index) => {
     const top = centerY - badge.height / 2;
-    const radius = 6;
+    const radius = getBadgeRadius(badge, badge.height);
+    ctx.font = `${badge.fontWeight} ${badge.fontSize}px sans-serif`;
+    ctx.lineWidth = badge.strokeWidth;
+    ctx.shadowBlur = badge.tone === "neon" ? 8 : 0;
+    ctx.shadowColor = badge.tone === "neon" ? badge.borderColor : "transparent";
+    ctx.shadowOffsetX = badge.tone === "retro" ? 2 : 0;
+    ctx.shadowOffsetY = badge.tone === "retro" ? 2 : 0;
 
-    ctx.fillStyle = badge.color;
-    ctx.beginPath();
-    ctx.moveTo(currentX + radius, top);
-    ctx.lineTo(currentX + badge.width - radius, top);
-    ctx.quadraticCurveTo(currentX + badge.width, top, currentX + badge.width, top + radius);
-    ctx.lineTo(currentX + badge.width, top + badge.height - radius);
-    ctx.quadraticCurveTo(currentX + badge.width, top + badge.height, currentX + badge.width - radius, top + badge.height);
-    ctx.lineTo(currentX + radius, top + badge.height);
-    ctx.quadraticCurveTo(currentX, top + badge.height, currentX, top + badge.height - radius);
-    ctx.lineTo(currentX, top + radius);
-    ctx.quadraticCurveTo(currentX, top, currentX + radius, top);
-    ctx.closePath();
-    ctx.fill();
+    if (badge.shape === "ribbon") {
+      drawRibbonBadge(ctx, currentX, top, badge.width, badge.height);
+    } else {
+      drawRoundedRect(ctx, currentX, top, badge.width, badge.height, radius);
+    }
 
-    ctx.fillStyle = "#ffffff";
-    ctx.fillText(badge.label, currentX + badge.width / 2, centerY + 0.5);
+    if (badge.shape === "outline") {
+      ctx.strokeStyle = badge.borderColor;
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = createBadgeFillStyle(ctx, badge, currentX, top, badge.width, badge.height);
+      ctx.fill();
+      ctx.strokeStyle = badge.borderColor;
+      ctx.stroke();
+    }
+
+    ctx.shadowBlur = 0;
+    ctx.shadowColor = "transparent";
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+    if (badge.tone === "retro") {
+      ctx.font = `${badge.fontWeight} ${badge.fontSize}px ui-monospace, monospace`;
+    }
+    ctx.fillStyle = badge.textColor;
+    ctx.fillText(getBadgeDisplayText(badge), currentX + badge.width / 2, centerY + 0.5);
     currentX += badge.width + (index < badges.length - 1 ? badgeGap : 0);
   });
 
@@ -226,6 +346,53 @@ function getAdaptiveGap(
   return clamp(Math.round(safeBase + slotSlack * 0.04 - textLengthPenalty), safeMin, safeMax);
 }
 
+function getNormalRowContentBounds(
+  ctx: CanvasRenderingContext2D,
+  item: ReactionItem,
+  fontFamily: string,
+  fontSize: number,
+  contentAlign: ContentAlign,
+  gapMin: number,
+  gapBase: number,
+  gapMax: number,
+): CenterLineBounds | null {
+  if (item.rowType === "centerText") return null;
+
+  const { totalWidth: badgeTotalWidth } = getBadgeMetrics(ctx, item, gapBase);
+  const badgeGap = getBadgeGap(gapBase);
+  const countFontSize = getCountFontSize(fontSize);
+  ctx.font = `800 ${countFontSize}px ${fontFamily}`;
+  const countText = getCountText(item.count);
+  const hasCount = countText.length > 0;
+  const countWidth = ctx.measureText(countText).width;
+  const adaptiveGap = hasCount ? getAdaptiveGap(ctx, countText, item.text.trim(), gapMin, gapBase, gapMax) : 0;
+
+  ctx.font = `500 ${fontSize}px ${fontFamily}`;
+
+  if (contentAlign === "left") {
+    const countLeft = CANVAS_PADDING_X;
+    const textLeft = hasCount ? countLeft + countWidth + COUNT_SLOT_SIDE_PADDING + adaptiveGap : countLeft;
+    const textRightLimit =
+      CANVAS_WIDTH - CANVAS_PADDING_X - (badgeTotalWidth > 0 ? badgeTotalWidth + badgeGap : 0);
+    const maxTextWidth = Math.max(40, textRightLimit - textLeft);
+    const safeText = fitText(ctx, item.text.trim(), maxTextWidth);
+    const textWidth = ctx.measureText(safeText).width;
+    const left = hasCount ? countLeft : textLeft;
+    const right = Math.max(hasCount ? countLeft + countWidth : textLeft, textLeft + textWidth);
+    return { left, right };
+  }
+
+  const countRight = CANVAS_WIDTH - CANVAS_PADDING_X;
+  const textRight = hasCount ? countRight - countWidth - COUNT_SLOT_SIDE_PADDING - adaptiveGap : countRight;
+  const textLeftLimit = CANVAS_PADDING_X + (badgeTotalWidth > 0 ? badgeTotalWidth + badgeGap : 0);
+  const maxTextWidth = Math.max(40, textRight - textLeftLimit);
+  const safeText = fitText(ctx, item.text.trim(), maxTextWidth);
+  const textWidth = ctx.measureText(safeText).width;
+  const left = Math.min(hasCount ? countRight - countWidth : textRight, textRight - textWidth);
+  const right = hasCount ? countRight : textRight;
+  return { left, right };
+}
+
 async function waitForCanvasFont(fontPreset: FontPresetId) {
   if (typeof document === "undefined" || !("fonts" in document)) return;
 
@@ -242,6 +409,7 @@ function drawLeftExampleRow(
   item: ReactionItem,
   centerY: number,
   fontFamily: string,
+  fontSize: number,
   strokeWidth: number,
   gapMin: number,
   gapBase: number,
@@ -249,20 +417,24 @@ function drawLeftExampleRow(
 ) {
   const { totalWidth: badgeTotalWidth } = getBadgeMetrics(ctx, item, gapBase);
   const badgeGap = getBadgeGap(gapBase);
-  ctx.font = `800 28px ${fontFamily}`;
-  const countText = String(item.count);
+  const countFontSize = getCountFontSize(fontSize);
+  ctx.font = `800 ${countFontSize}px ${fontFamily}`;
+  const countText = getCountText(item.count);
+  const hasCount = countText.length > 0;
   const countLeft = CANVAS_PADDING_X;
   const countWidth = ctx.measureText(countText).width;
-  const adaptiveGap = getAdaptiveGap(ctx, countText, item.text.trim(), gapMin, gapBase, gapMax);
-  const textLeft = countLeft + countWidth + COUNT_SLOT_SIDE_PADDING + adaptiveGap;
+  const adaptiveGap = hasCount ? getAdaptiveGap(ctx, countText, item.text.trim(), gapMin, gapBase, gapMax) : 0;
+  const textLeft = hasCount ? countLeft + countWidth + COUNT_SLOT_SIDE_PADDING + adaptiveGap : countLeft;
   const textRightLimit =
     CANVAS_WIDTH - CANVAS_PADDING_X - (badgeTotalWidth > 0 ? badgeTotalWidth + badgeGap : 0);
   const maxTextWidth = Math.max(40, textRightLimit - textLeft);
 
-  drawTextWithStroke(ctx, countText, countLeft, centerY, item.countColor, "left", strokeWidth, "strong");
+  if (hasCount) {
+    drawTextWithStroke(ctx, countText, countLeft, centerY, item.countColor, "left", strokeWidth, "strong");
+  }
 
-  ctx.font = `500 26px ${fontFamily}`;
-  const safeText = fitText(ctx, item.text.trim() || "REACTION", maxTextWidth);
+  ctx.font = `500 ${fontSize}px ${fontFamily}`;
+  const safeText = fitText(ctx, item.text.trim(), maxTextWidth);
   drawTextWithStroke(ctx, safeText, textLeft, centerY, item.textColor, "left", strokeWidth);
 
   if (badgeTotalWidth > 0) {
@@ -277,6 +449,7 @@ function drawRightExampleRow(
   item: ReactionItem,
   centerY: number,
   fontFamily: string,
+  fontSize: number,
   strokeWidth: number,
   gapMin: number,
   gapBase: number,
@@ -284,19 +457,23 @@ function drawRightExampleRow(
 ) {
   const { totalWidth: badgeTotalWidth } = getBadgeMetrics(ctx, item, gapBase);
   const badgeGap = getBadgeGap(gapBase);
-  ctx.font = `800 28px ${fontFamily}`;
-  const countText = String(item.count);
+  const countFontSize = getCountFontSize(fontSize);
+  ctx.font = `800 ${countFontSize}px ${fontFamily}`;
+  const countText = getCountText(item.count);
+  const hasCount = countText.length > 0;
   const countWidth = ctx.measureText(countText).width;
-  const adaptiveGap = getAdaptiveGap(ctx, countText, item.text.trim(), gapMin, gapBase, gapMax);
+  const adaptiveGap = hasCount ? getAdaptiveGap(ctx, countText, item.text.trim(), gapMin, gapBase, gapMax) : 0;
   const countRight = CANVAS_WIDTH - CANVAS_PADDING_X;
-  const textRight = countRight - countWidth - COUNT_SLOT_SIDE_PADDING - adaptiveGap;
+  const textRight = hasCount ? countRight - countWidth - COUNT_SLOT_SIDE_PADDING - adaptiveGap : countRight;
   const textLeftLimit = CANVAS_PADDING_X + (badgeTotalWidth > 0 ? badgeTotalWidth + badgeGap : 0);
   const maxTextWidth = Math.max(40, textRight - textLeftLimit);
 
-  drawTextWithStroke(ctx, countText, countRight, centerY, item.countColor, "right", strokeWidth, "strong");
+  if (hasCount) {
+    drawTextWithStroke(ctx, countText, countRight, centerY, item.countColor, "right", strokeWidth, "strong");
+  }
 
-  ctx.font = `500 26px ${fontFamily}`;
-  const safeText = fitText(ctx, item.text.trim() || "REACTION", maxTextWidth);
+  ctx.font = `500 ${fontSize}px ${fontFamily}`;
+  const safeText = fitText(ctx, item.text.trim(), maxTextWidth);
   drawTextWithStroke(ctx, safeText, textRight, centerY, item.textColor, "right", strokeWidth);
 
   if (badgeTotalWidth > 0) {
@@ -312,20 +489,43 @@ function drawReactionRow(
   rowY: number,
   rowHeight: number,
   fontFamily: string,
+  fontSize: number,
   contentAlign: ContentAlign,
   strokeWidth: number,
   gapMin: number,
   gapBase: number,
   gapMax: number,
+  centerLineBounds?: CenterLineBounds,
 ) {
   const centerY = rowY + rowHeight / 2;
 
-  if (contentAlign === "left") {
-    drawLeftExampleRow(ctx, item, centerY, fontFamily, strokeWidth, gapMin, gapBase, gapMax);
+  if (item.rowType === "centerText") {
+    const centerX = centerLineBounds
+      ? (centerLineBounds.left + centerLineBounds.right) / 2
+      : CANVAS_WIDTH / 2;
+    const maxTextWidth = centerLineBounds
+      ? Math.max(40, centerLineBounds.right - centerLineBounds.left)
+      : CANVAS_WIDTH - CANVAS_PADDING_X * 2;
+    ctx.font = `500 ${fontSize}px ${fontFamily}`;
+    const safeText = fitText(ctx, item.text.trim(), maxTextWidth);
+    drawTextWithStroke(
+      ctx,
+      safeText,
+      centerX,
+      centerY,
+      item.textColor,
+      "center",
+      strokeWidth,
+    );
     return;
   }
 
-  drawRightExampleRow(ctx, item, centerY, fontFamily, strokeWidth, gapMin, gapBase, gapMax);
+  if (contentAlign === "left") {
+    drawLeftExampleRow(ctx, item, centerY, fontFamily, fontSize, strokeWidth, gapMin, gapBase, gapMax);
+    return;
+  }
+
+  drawRightExampleRow(ctx, item, centerY, fontFamily, fontSize, strokeWidth, gapMin, gapBase, gapMax);
 }
 
 function findCanvasContentBounds(canvas: HTMLCanvasElement, padding = 10): CropBounds {
@@ -411,13 +611,18 @@ function cropCanvas(canvas: HTMLCanvasElement, bounds: CropBounds) {
   return cropped;
 }
 
-function buildRawPageCanvases(items: ReactionItem[], options: RenderOptions) {
+function buildRawPageCanvases(
+  items: ReactionItem[],
+  options: RenderOptions,
+  centerLineBoundsByPage?: Array<CenterLineBounds | undefined>,
+) {
   const logicalPages = chunkItems(items, options.itemsPerPage);
 
-  return logicalPages.map((page) =>
+  return logicalPages.map((page, pageIndex) =>
     renderSingleReactionPage(page, {
       itemsPerPage: options.itemsPerPage,
       fontPreset: options.fontPreset,
+      fontSize: options.fontSize,
       contentAlign: options.contentAlign,
       strokeWidth: options.strokeWidth,
       gapMin: options.gapMin,
@@ -425,11 +630,16 @@ function buildRawPageCanvases(items: ReactionItem[], options: RenderOptions) {
       gapMax: options.gapMax,
       rowHeight: options.rowHeight,
       verticalPadding: options.verticalPadding,
-    }),
+    }, options.itemsPerPage, centerLineBoundsByPage?.[pageIndex]),
   );
 }
 
-function renderSingleReactionPage(pageItems: ReactionItem[], options: RenderOptions, rowCount = options.itemsPerPage) {
+function renderSingleReactionPage(
+  pageItems: ReactionItem[],
+  options: RenderOptions,
+  rowCount = options.itemsPerPage,
+  centerLineBounds?: CenterLineBounds,
+) {
   const canvas = document.createElement("canvas");
   canvas.width = CANVAS_WIDTH;
   canvas.height = options.verticalPadding * 2 + options.rowHeight * Math.max(1, rowCount);
@@ -455,40 +665,89 @@ function renderSingleReactionPage(pageItems: ReactionItem[], options: RenderOpti
       rowY,
       options.rowHeight,
       fontFamily,
+      options.fontSize,
       options.contentAlign,
       options.strokeWidth,
       options.gapMin,
       options.gapBase,
       options.gapMax,
+      centerLineBounds,
     );
   }
 
   return canvas;
 }
 
+function getCenterLineBoundsByPage(items: ReactionItem[], options: RenderOptions) {
+  const pages = chunkItems(items, options.itemsPerPage);
+  const measurementCanvas = document.createElement("canvas");
+  const ctx = measurementCanvas.getContext("2d");
+  if (!ctx) return pages.map(() => undefined);
+
+  const fontFamily = getFontPreset(options.fontPreset).cssFamily;
+
+  return pages.map((page) => {
+    const bounds = page
+      .map((item) =>
+        getNormalRowContentBounds(
+          ctx,
+          item,
+          fontFamily,
+          options.fontSize,
+          options.contentAlign,
+          options.gapMin,
+          options.gapBase,
+          options.gapMax,
+        ),
+      )
+      .filter((value): value is CenterLineBounds => value !== null);
+
+    if (bounds.length === 0) return undefined;
+
+    return {
+      left: Math.min(...bounds.map((value) => value.left)),
+      right: Math.max(...bounds.map((value) => value.right)),
+    };
+  });
+}
+
+function buildCroppedPageCanvases(items: ReactionItem[], options: RenderOptions) {
+  const logicalPages = chunkItems(items, options.itemsPerPage);
+  const centerLineBoundsByPage = getCenterLineBoundsByPage(items, options);
+  const firstPassCanvases = buildRawPageCanvases(items, options, centerLineBoundsByPage);
+  const sharedWidth = firstPassCanvases[0]?.width ?? CANVAS_WIDTH;
+  const sharedHeight =
+    firstPassCanvases[0]?.height ?? options.verticalPadding * 2 + options.rowHeight * Math.max(1, options.itemsPerPage);
+  const secondPassCanvases = buildRawPageCanvases(items, options, centerLineBoundsByPage);
+  const finalBounds = mergeCropBounds(
+    secondPassCanvases.map((canvas) => findCanvasContentBounds(canvas)),
+    sharedWidth,
+    sharedHeight,
+  );
+
+  return {
+    pageCount: logicalPages.length,
+    canvases: secondPassCanvases.map((canvas) => cropCanvas(canvas, finalBounds)),
+    rawCanvases: secondPassCanvases,
+  };
+}
+
 export async function renderReactionCanvases(items: ReactionItem[], options: RenderOptions) {
   await waitForCanvasFont(options.fontPreset);
-
-  const logicalPages = chunkItems(items, options.itemsPerPage);
-  const rawCanvases = buildRawPageCanvases(items, options);
-
-  const mergedBounds = mergeCropBounds(
-    rawCanvases.map((canvas) => findCanvasContentBounds(canvas)),
-    rawCanvases[0]?.width ?? CANVAS_WIDTH,
-    rawCanvases[0]?.height ?? options.verticalPadding * 2 + options.rowHeight * Math.max(1, options.itemsPerPage),
-  );
-  const canvases = rawCanvases.map((canvas) => cropCanvas(canvas, mergedBounds));
+  const { canvases, pageCount } = buildCroppedPageCanvases(items, options);
 
   return {
     canvases,
-    pageCount: logicalPages.length,
+    pageCount,
   };
 }
 
 export async function renderReactionDataUrls(items: ReactionItem[], options: RenderOptions) {
-  const { canvases, pageCount } = await renderReactionCanvases(items, options);
+  await waitForCanvasFont(options.fontPreset);
+  const { canvases, pageCount } = buildCroppedPageCanvases(items, options);
   return {
     pages: canvases.map((canvas) => canvas.toDataURL("image/png")),
+    frameDurationMs: Math.max(1000, Math.round(options.fadeIntervalMs ?? 5000)),
     width: canvases[0]?.width ?? CANVAS_WIDTH,
     height: canvases[0]?.height ?? options.verticalPadding * 2 + options.rowHeight * Math.max(1, options.itemsPerPage),
     fullMenuPage: "",
@@ -499,18 +758,13 @@ export async function renderReactionDataUrls(items: ReactionItem[], options: Ren
 }
 
 export async function renderFullMenuPng(items: ReactionItem[], options: RenderOptions) {
-  const { canvases } = await renderReactionCanvases(items, options);
-  const rawCanvases = buildRawPageCanvases(items, options);
+  await waitForCanvasFont(options.fontPreset);
+  const { canvases, rawCanvases } = buildCroppedPageCanvases(items, options);
   const visibleCanvases =
     rawCanvases.length > 0
       ? rawCanvases.map((canvas) => {
           const bounds = findCanvasContentBounds(canvas);
-          return cropCanvas(canvas, {
-            left: bounds.left,
-            top: 0,
-            right: bounds.right,
-            bottom: canvas.height,
-          });
+          return cropCanvas(canvas, bounds);
         })
       : [renderSingleReactionPage([], options)];
   const totalWidth =

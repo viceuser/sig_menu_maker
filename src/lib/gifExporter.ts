@@ -35,7 +35,7 @@ function loadScript(src: string) {
     script.src = src;
     script.async = true;
     script.onload = () => resolve();
-    script.onerror = () => reject(new Error(`${src} 로드에 실패했습니다.`));
+    script.onerror = () => reject(new Error(`${src} 로드를 실패했습니다.`));
     document.body.appendChild(script);
   });
 }

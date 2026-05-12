@@ -18,10 +18,26 @@ export const PAINT_PRESETS: PaintPreset[] = [
   { id: "solid-white", label: "화이트", paint: { mode: "solid", color: "#ffffff" } },
   { id: "solid-mint", label: "민트", paint: { mode: "solid", color: "#44d7b6" } },
   { id: "solid-gold", label: "골드", paint: { mode: "solid", color: "#ffd700" } },
-  { id: "grad-pink", label: "핑크", paint: { mode: "gradient", from: "#ff8abf", to: "#ff4fd8", direction: "horizontal" } },
-  { id: "grad-sky", label: "하늘", paint: { mode: "gradient", from: "#7fd8ff", to: "#2979ff", direction: "horizontal" } },
-  { id: "grad-lime", label: "라임", paint: { mode: "gradient", from: "#f8ff7a", to: "#00c853", direction: "vertical" } },
-  { id: "grad-violet", label: "보라", paint: { mode: "gradient", from: "#d6a4ff", to: "#7c4dff", direction: "horizontal" } },
+  {
+    id: "grad-pink",
+    label: "핑크",
+    paint: { mode: "gradient", from: "#ff8abf", to: "#ff4fd8", direction: "horizontal" },
+  },
+  {
+    id: "grad-sky",
+    label: "하늘",
+    paint: { mode: "gradient", from: "#7fd8ff", to: "#2979ff", direction: "horizontal" },
+  },
+  {
+    id: "grad-lime",
+    label: "라임",
+    paint: { mode: "gradient", from: "#f8ff7a", to: "#00c853", direction: "vertical" },
+  },
+  {
+    id: "grad-violet",
+    label: "보라",
+    paint: { mode: "gradient", from: "#d6a4ff", to: "#7c4dff", direction: "horizontal" },
+  },
 ];
 
 export const STYLE_PRESETS: StylePreset[] = [

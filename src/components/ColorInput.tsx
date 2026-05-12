@@ -1,7 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { useClickOutside } from "@/hooks/useClickOutside";
+import {
+  createPortal,
+} from "react-dom";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import { addRecentColor, getRecentColors, normalizeHex } from "@/lib/recentColors";
 import type { GradientDirection, TextPaint } from "@/lib/types";
 
@@ -114,8 +124,7 @@ export function ColorInput({ value, onChange, label }: ColorInputProps) {
   const [paletteStyle, setPaletteStyle] = useState<CSSProperties>({});
   const wrapperRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
-
-  useClickOutside(wrapperRef, () => setIsOpen(false));
+  const paletteRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setDraft(normalizePaint(value));
@@ -129,10 +138,18 @@ export function ColorInput({ value, onChange, label }: ColorInputProps) {
       setPaletteStyle(getPalettePosition(buttonRef.current));
     };
 
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (wrapperRef.current?.contains(target) || paletteRef.current?.contains(target)) return;
+      setIsOpen(false);
+    };
+
     syncPalette();
+    document.addEventListener("mousedown", handlePointerDown);
     window.addEventListener("resize", syncPalette);
     window.addEventListener("scroll", syncPalette, true);
     return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
       window.removeEventListener("resize", syncPalette);
       window.removeEventListener("scroll", syncPalette, true);
     };
@@ -209,155 +226,166 @@ export function ColorInput({ value, onChange, label }: ColorInputProps) {
     );
   }, [commitPaint, draft]);
 
-  const updateDraftColor = useCallback((next: string) => {
-    setDraft((prev) =>
-      prev.mode === "solid" ? { mode: "solid", color: next } : { ...prev, [gradientTarget]: next },
-    );
-  }, [gradientTarget]);
+  const updateDraftColor = useCallback(
+    (next: string) => {
+      setDraft((prev) =>
+        prev.mode === "solid" ? { mode: "solid", color: next } : { ...prev, [gradientTarget]: next },
+      );
+    },
+    [gradientTarget],
+  );
 
-  const openPalette = () => {
+  const togglePalette = () => {
     setPaletteStyle(getPalettePosition(buttonRef.current));
     setIsOpen((open) => !open);
   };
 
-  return (
-    <div ref={wrapperRef} className="relative flex min-w-48 items-center gap-2">
-      <select
-        aria-label={`${label} 모드`}
-        value={draft.mode}
-        onChange={(event) => {
-          const mode = event.target.value as TextPaint["mode"];
-          if (mode === "solid") {
-            setDraft({ mode: "solid", color: activeSolidColor });
-            return;
-          }
-
-          setDraft({
-            mode: "gradient",
-            from: value.mode === "gradient" ? value.from : activeSolidColor,
-            to: value.mode === "gradient" ? value.to : "#ffffff",
-            direction: value.mode === "gradient" ? value.direction : "horizontal",
-          });
-        }}
-        className="h-9 rounded-md border border-zinc-300 bg-white px-2 text-sm outline-none focus:border-zinc-950"
-      >
-        <option value="solid">단색</option>
-        <option value="gradient">그라데이션</option>
-      </select>
-
-      <input
-        aria-label={label}
-        value={activeSolidColor}
-        onChange={(event) => updateDraftColor(event.target.value)}
-        className="h-9 w-28 rounded-md border border-zinc-300 bg-white px-2 font-mono text-sm text-zinc-900 outline-none focus:border-zinc-950"
-      />
-
-      <button
-        ref={buttonRef}
-        type="button"
-        aria-label={`${label} 팔레트 열기`}
-        onClick={openPalette}
-        className="h-7 w-7 rounded-md border border-zinc-300 transition hover:scale-110 hover:border-zinc-900"
-        style={createPaintPreviewStyle(draft)}
-      />
-
-      {isOpen ? (
-        <div
-          className="z-50 overflow-y-auto rounded-md border border-zinc-200 bg-white p-4 text-zinc-950 shadow-xl"
-          style={paletteStyle}
-        >
-          {draft.mode === "gradient" ? (
-            <div className="mb-4 rounded-md border border-zinc-200 p-3">
-              <div className="mb-3 flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setGradientTarget("from")}
-                  className={`rounded-md px-2 py-1 text-xs font-bold ${gradientTarget === "from" ? "bg-zinc-950 text-white" : "bg-zinc-100 text-zinc-700"}`}
-                >
-                  시작색
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setGradientTarget("to")}
-                  className={`rounded-md px-2 py-1 text-xs font-bold ${gradientTarget === "to" ? "bg-zinc-950 text-white" : "bg-zinc-100 text-zinc-700"}`}
-                >
-                  끝색
-                </button>
-                <select
-                  value={draft.direction}
-                  onChange={(event) =>
-                    setDraft((prev) =>
-                      prev.mode === "gradient"
-                        ? { ...prev, direction: event.target.value as GradientDirection }
-                        : prev,
-                    )
-                  }
-                  className="ml-auto h-8 rounded-md border border-zinc-300 bg-white px-2 text-xs outline-none focus:border-zinc-950"
-                >
-                  <option value="horizontal">가로</option>
-                  <option value="vertical">세로</option>
-                </select>
+  const palette =
+    isOpen && typeof document !== "undefined"
+      ? createPortal(
+          <div
+            ref={paletteRef}
+            className="z-[1100] overflow-y-auto rounded-md border border-zinc-200 bg-white p-4 text-zinc-950 shadow-2xl dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+            style={paletteStyle}
+          >
+            {draft.mode === "gradient" ? (
+              <div className="mb-4 rounded-md border border-zinc-200 p-3 dark:border-zinc-700">
+                <div className="mb-3 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setGradientTarget("from")}
+                    className={`rounded-md px-2 py-1 text-xs font-bold ${gradientTarget === "from" ? "bg-zinc-950 text-white dark:bg-zinc-100 dark:text-zinc-950" : "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"}`}
+                  >
+                    시작색
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setGradientTarget("to")}
+                    className={`rounded-md px-2 py-1 text-xs font-bold ${gradientTarget === "to" ? "bg-zinc-950 text-white dark:bg-zinc-100 dark:text-zinc-950" : "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"}`}
+                  >
+                    끝색
+                  </button>
+                  <select
+                    value={draft.direction}
+                    onChange={(event) =>
+                      setDraft((prev) =>
+                        prev.mode === "gradient"
+                          ? { ...prev, direction: event.target.value as GradientDirection }
+                          : prev,
+                      )
+                    }
+                    className="ml-auto h-8 rounded-md border border-zinc-300 bg-white px-2 text-xs outline-none focus:border-zinc-950 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-zinc-300"
+                  >
+                    <option value="horizontal">가로</option>
+                    <option value="vertical">세로</option>
+                  </select>
+                </div>
+                <div className="h-10 rounded-md border border-zinc-200 dark:border-zinc-700" style={createPaintPreviewStyle(draft)} />
               </div>
-              <div className="h-10 rounded-md border border-zinc-200" style={createPaintPreviewStyle(draft)} />
-            </div>
-          ) : null}
+            ) : null}
 
-          <PaletteSection title="최근 사용 색상">
-            {recentColors.length ? (
-              recentColors.map((color) => (
-                <Swatch key={color} color={color} active={color === activeSolidColor} onClick={applyPresetColor} />
-              ))
-            ) : (
-              <p className="text-xs text-zinc-500">아직 선택한 색상이 없습니다.</p>
-            )}
-          </PaletteSection>
+            <PaletteSection title="최근 사용 색상">
+              {recentColors.length ? (
+                recentColors.map((color) => (
+                  <Swatch key={color} color={color} active={color === activeSolidColor} onClick={applyPresetColor} />
+                ))
+              ) : (
+                <p className="text-xs text-zinc-500 dark:text-zinc-400">아직 선택한 색상이 없습니다.</p>
+              )}
+            </PaletteSection>
 
-          <PaletteSection title="프리셋 팔레트">
-            <div className="grid grid-cols-10 gap-2">
-              {PRESET_COLORS.map((color, index) => (
-                <Swatch
-                  key={`${color}-${index}`}
-                  color={color}
-                  active={color === activeSolidColor}
-                  onClick={applyPresetColor}
+            <PaletteSection title="프리셋 팔레트">
+              <div className="grid grid-cols-10 gap-2">
+                {PRESET_COLORS.map((color, index) => (
+                  <Swatch
+                    key={`${color}-${index}`}
+                    color={color}
+                    active={color === activeSolidColor}
+                    onClick={applyPresetColor}
+                  />
+                ))}
+              </div>
+            </PaletteSection>
+
+            <div className="mt-4 border-t border-zinc-200 pt-4 dark:border-zinc-700">
+              <p className="mb-2 text-xs font-bold text-zinc-600 dark:text-zinc-300">직접 입력</p>
+              <div className="flex items-center gap-2">
+                <input
+                  value={activeSolidColor}
+                  onChange={(event) => updateDraftColor(event.target.value)}
+                  className="h-9 flex-1 rounded-md border border-zinc-300 px-2 font-mono text-sm outline-none focus:border-zinc-950 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-zinc-300"
                 />
-              ))}
+                <input
+                  type="color"
+                  value={normalizeHex(activeSolidColor) ?? "#ffffff"}
+                  onChange={(event) => updateDraftColor(event.target.value)}
+                  className="h-9 w-12 rounded-md border border-zinc-300 bg-white dark:border-zinc-700 dark:bg-zinc-950"
+                />
+                <button
+                  type="button"
+                  onClick={applyDraftAndClose}
+                  className="h-9 rounded-md bg-zinc-950 px-3 text-sm font-bold text-white dark:bg-zinc-100 dark:text-zinc-950"
+                >
+                  적용
+                </button>
+              </div>
             </div>
-          </PaletteSection>
+          </div>,
+          document.body,
+        )
+      : null;
 
-          <div className="mt-4 border-t border-zinc-200 pt-4">
-            <p className="mb-2 text-xs font-bold text-zinc-600">직접 입력</p>
-            <div className="flex items-center gap-2">
-              <input
-                value={activeSolidColor}
-                onChange={(event) => updateDraftColor(event.target.value)}
-                className="h-9 flex-1 rounded-md border border-zinc-300 px-2 font-mono text-sm outline-none focus:border-zinc-950"
-              />
-              <input
-                type="color"
-                value={normalizeHex(activeSolidColor) ?? "#ffffff"}
-                onChange={(event) => updateDraftColor(event.target.value)}
-                className="h-9 w-12 rounded-md border border-zinc-300 bg-white"
-              />
-              <button
-                type="button"
-                onClick={applyDraftAndClose}
-                className="h-9 rounded-md bg-zinc-950 px-3 text-sm font-bold text-white"
-              >
-                적용
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-    </div>
+  return (
+    <>
+      <div ref={wrapperRef} className="relative flex min-w-48 items-center gap-2">
+        <select
+          aria-label={`${label} 모드`}
+          value={draft.mode}
+          onChange={(event) => {
+            const mode = event.target.value as TextPaint["mode"];
+            if (mode === "solid") {
+              setDraft({ mode: "solid", color: activeSolidColor });
+              return;
+            }
+
+            setDraft({
+              mode: "gradient",
+              from: value.mode === "gradient" ? value.from : activeSolidColor,
+              to: value.mode === "gradient" ? value.to : "#ffffff",
+              direction: value.mode === "gradient" ? value.direction : "horizontal",
+            });
+          }}
+          className="h-9 rounded-md border border-zinc-300 bg-white px-2 text-sm outline-none focus:border-zinc-950 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-zinc-300"
+        >
+          <option value="solid">단색</option>
+          <option value="gradient">그라데이션</option>
+        </select>
+
+        <input
+          aria-label={label}
+          value={activeSolidColor}
+          onChange={(event) => updateDraftColor(event.target.value)}
+          className="h-9 w-28 rounded-md border border-zinc-300 bg-white px-2 font-mono text-sm text-zinc-900 outline-none focus:border-zinc-950 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-zinc-300"
+        />
+
+        <button
+          ref={buttonRef}
+          type="button"
+          aria-label={`${label} 팔레트 열기`}
+          onClick={togglePalette}
+          className="h-7 w-7 rounded-md border border-zinc-300 transition hover:scale-110 hover:border-zinc-900 dark:border-zinc-700 dark:hover:border-zinc-300"
+          style={createPaintPreviewStyle(draft)}
+        />
+      </div>
+      {palette}
+    </>
   );
 }
 
 function PaletteSection({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="mt-1">
-      <p className="mb-2 text-xs font-bold text-zinc-600">{title}</p>
+      <p className="mb-2 text-xs font-bold text-zinc-600 dark:text-zinc-300">{title}</p>
       <div className="mb-4 flex flex-wrap gap-2">{children}</div>
     </div>
   );
@@ -377,7 +405,7 @@ function Swatch({
       type="button"
       title={color}
       onClick={() => onClick(color)}
-      className="relative h-[22px] w-[22px] rounded border border-zinc-300 transition hover:scale-[1.2] hover:border-zinc-950"
+      className="relative h-[22px] w-[22px] rounded border border-zinc-300 transition hover:scale-[1.2] hover:border-zinc-950 dark:border-zinc-700 dark:hover:border-zinc-300"
       style={{ backgroundColor: color }}
     >
       {active ? (

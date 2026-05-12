@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "리액션 메뉴판 생성기",
-  description: "방송용 리액션 메뉴판을 관리하고 GIF로 저장합니다.",
+  description: "방송용 리액션 메뉴판을 관리하고 GIF와 PNG로 출력합니다.",
 };
 
 export default function RootLayout({
@@ -20,6 +20,8 @@ export default function RootLayout({
           href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;800;900&display=swap"
           rel="stylesheet"
         />
+        <link rel="stylesheet" href="https://unpkg.com/@kfonts/bm-hanna-pro/index.css" />
+        <link rel="stylesheet" href="https://unpkg.com/@kfonts/bm-jua-otf/index.css" />
       </head>
       <body className="min-h-full flex flex-col">{children}</body>
     </html>

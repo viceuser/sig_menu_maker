@@ -11,6 +11,18 @@ export const FONT_PRESETS = [
     description: "가독성 중심 고딕형",
     cssFamily: "'JalnanGothic', 'Noto Sans KR', sans-serif",
   },
+  {
+    id: "bm-hanna-pro",
+    label: "배민 한나체 Pro",
+    description: "개성 강한 포인트형",
+    cssFamily: "'배달의민족 한나체 Pro', 'BM HANNA Pro', 'bm-hanna-pro', 'Noto Sans KR', sans-serif",
+  },
+  {
+    id: "bm-jua",
+    label: "배민 주아체",
+    description: "둥글고 귀여운 포인트형",
+    cssFamily: "'배달의민족 주아 OTF', 'BM JUA OTF', 'bm-jua-otf', 'Noto Sans KR', sans-serif",
+  },
 ] as const;
 
 export type FontPresetId = (typeof FONT_PRESETS)[number]["id"];
