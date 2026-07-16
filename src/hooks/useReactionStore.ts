@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { arrayMove } from "@dnd-kit/sortable";
 import { v4 as uuidv4 } from "uuid";
 import { createCustomBadge } from "@/lib/badges";
@@ -21,7 +21,11 @@ import {
   type ContentAlign,
   type ReactionItem,
 } from "@/lib/types";
-import { loadMenuConfig, saveConfig, saveItems, saveMenuConfig } from "@/lib/storage";
+import { loadMenuConfig, saveItems, saveMenuConfig } from "@/lib/storage";
+
+export type SaveState = "saving" | "saved";
+
+const AUTOSAVE_DEBOUNCE_MS = 600;
 
 export function createReactionItem(): ReactionItem {
   return {
@@ -66,6 +70,8 @@ export function useReactionStore() {
   const [rowHeight, setRowHeight] = useState(DEFAULT_ROW_HEIGHT);
   const [verticalPadding, setVerticalPadding] = useState(DEFAULT_VERTICAL_PADDING);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [saveState, setSaveState] = useState<SaveState>("saved");
+  const skipNextAutosaveRef = useRef(true);
 
   const reload = useCallback(() => {
     const config = loadMenuConfig();
@@ -84,6 +90,7 @@ export function useReactionStore() {
     setRowHeight(config.rowHeight || DEFAULT_ROW_HEIGHT);
     setVerticalPadding(config.verticalPadding || DEFAULT_VERTICAL_PADDING);
     setSelectedIds(new Set());
+    skipNextAutosaveRef.current = true;
     setIsLoaded(true);
   }, []);
 
@@ -92,6 +99,52 @@ export function useReactionStore() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     reload();
   }, [reload]);
+
+  useEffect(() => {
+    if (!isLoaded) return;
+
+    // 방금 localStorage에서 불러온 데이터를 다시 저장하는 낭비를 막는다.
+    if (skipNextAutosaveRef.current) {
+      skipNextAutosaveRef.current = false;
+      return;
+    }
+
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSaveState("saving");
+    const timer = window.setTimeout(() => {
+      saveMenuConfig({
+        items,
+        itemsPerPage,
+        fadeInterval,
+        fontPreset,
+        fontSize,
+        contentAlign,
+        strokeWidth,
+        gapMin,
+        gapBase,
+        gapMax,
+        rowHeight,
+        verticalPadding,
+      });
+      setSaveState("saved");
+    }, AUTOSAVE_DEBOUNCE_MS);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    contentAlign,
+    fadeInterval,
+    fontPreset,
+    fontSize,
+    gapBase,
+    gapMax,
+    gapMin,
+    isLoaded,
+    items,
+    itemsPerPage,
+    rowHeight,
+    strokeWidth,
+    verticalPadding,
+  ]);
 
   const insertItemNearSelection = useCallback(
     (nextItem: ReactionItem) => {
@@ -223,38 +276,6 @@ export function useReactionStore() {
     verticalPadding,
   ]);
 
-  const saveSettings = useCallback(() => {
-    saveConfig({
-      itemsPerPage,
-      fadeInterval,
-      fontPreset,
-      fontSize,
-      contentAlign,
-      strokeWidth,
-      gapMin,
-      gapBase,
-      gapMax,
-      rowHeight,
-      verticalPadding,
-    });
-  }, [
-    contentAlign,
-    fadeInterval,
-    fontPreset,
-    fontSize,
-    gapBase,
-    gapMax,
-    gapMin,
-    itemsPerPage,
-    rowHeight,
-    strokeWidth,
-    verticalPadding,
-  ]);
-
-  const saveOnlyItems = useCallback(() => {
-    saveItems(items);
-  }, [items]);
-
   const allSelected = items.length > 0 && selectedIds.size === items.length;
 
   return useMemo(
@@ -273,6 +294,7 @@ export function useReactionStore() {
       rowHeight,
       verticalPadding,
       isLoaded,
+      saveState,
       selectedCount: selectedIds.size,
       allSelected,
       setItemsPerPage,
@@ -298,8 +320,6 @@ export function useReactionStore() {
       toggleAll,
       moveItem,
       saveAll,
-      saveSettings,
-      saveOnlyItems,
       reload,
     }),
     [
@@ -325,8 +345,7 @@ export function useReactionStore() {
       replaceItems,
       rowHeight,
       saveAll,
-      saveOnlyItems,
-      saveSettings,
+      saveState,
       selectedIds,
       strokeWidth,
       toggleAll,

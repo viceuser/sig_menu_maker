@@ -12,8 +12,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ko" className="h-full antialiased">
+    <html lang="ko" className="h-full antialiased" suppressHydrationWarning>
       <head>
+        <script
+          // 페인트 전에 저장된 테마를 적용해 다크 사용자에게 라이트 화면이 번쩍이는 것을 막는다.
+          dangerouslySetInnerHTML={{
+            __html: `try{if(localStorage.getItem("reaction_theme")==="dark")document.documentElement.classList.add("dark")}catch(e){}`,
+          }}
+        />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link

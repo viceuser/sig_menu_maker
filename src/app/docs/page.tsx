@@ -1,6 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { DocsToc } from "@/components/DocsToc";
+import { ThemeToggle } from "@/components/ThemeToggle";
+import { createReactionCsvExample } from "@/lib/csv";
+import { SUPPORT_URL } from "@/lib/links";
 
 export const metadata: Metadata = {
   title: "Reaction Menu Maker 사용자 가이드",
@@ -8,31 +12,38 @@ export const metadata: Metadata = {
     "리액션 메뉴판 생성기의 전체 기능, CSV 업로드, 배지 설정, 미리보기, GIF/PNG 저장 방법을 정리한 사용자 매뉴얼입니다.",
 };
 
-const NAV: { id: string; label: string }[] = [
-  { id: "quick-start", label: "빠른 시작" },
-  { id: "outputs", label: "출력 종류" },
-  { id: "top-settings", label: "1. 상단 설정" },
-  { id: "detail-settings", label: "2. 상세 설정" },
-  { id: "table", label: "3. 테이블 편집" },
-  { id: "colors", label: "4. 색상과 그라데이션" },
-  { id: "badges", label: "5. 배지 설정" },
-  { id: "bulk", label: "6. 일괄 적용" },
-  { id: "csv", label: "7. CSV 업로드 / 다운로드" },
-  { id: "preview", label: "8. 미리보기와 저장" },
-  { id: "storage", label: "9. 저장 방식" },
-  { id: "faq", label: "10. 자주 묻는 질문" },
+// 섹션 번호는 배열 순서에서 자동으로 계산된다. 섹션을 끼워 넣어도 번호를 손볼 필요가 없다.
+const NAV_BASE: { id: string; label: string; numbered: boolean }[] = [
+  { id: "quick-start", label: "빠른 시작", numbered: false },
+  { id: "outputs", label: "출력 종류", numbered: false },
+  { id: "settings", label: "출력 설정", numbered: true },
+  { id: "detail-settings", label: "상세 설정", numbered: true },
+  { id: "table", label: "테이블 편집", numbered: true },
+  { id: "colors", label: "색상과 그라데이션", numbered: true },
+  { id: "badges", label: "배지 설정", numbered: true },
+  { id: "bulk", label: "일괄 적용", numbered: true },
+  { id: "csv", label: "CSV 업로드 / 다운로드", numbered: true },
+  { id: "preview", label: "미리보기와 저장", numbered: true },
+  { id: "storage", label: "저장 방식", numbered: true },
+  { id: "faq", label: "자주 묻는 질문", numbered: true },
 ];
 
-const csvExample = ["count,text", "100,살아있네", "105,POSE"].join("\n");
+let sectionNumber = 0;
+const NAV = NAV_BASE.map((item) =>
+  item.numbered ? { id: item.id, label: `${++sectionNumber}. ${item.label}` } : { id: item.id, label: item.label },
+);
+
+const SECTION_TITLES = Object.fromEntries(NAV.map((item) => [item.id, item.label])) as Record<string, string>;
+
+// 앱과 동일한 예시를 그대로 사용해 문서와 실제 다운로드 파일이 어긋나지 않게 한다.
+const csvExample = createReactionCsvExample();
 
 function Section({
   id,
-  title,
   lead,
   children,
 }: {
   id: string;
-  title: string;
   lead?: string;
   children: ReactNode;
 }) {
@@ -41,16 +52,7 @@ function Section({
       id={id}
       className="scroll-mt-24 border-t border-zinc-200 py-10 first:border-t-0 first:pt-0 dark:border-zinc-800"
     >
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="text-2xl font-black tracking-tight text-zinc-950 dark:text-zinc-50">{title}</h2>
-        <a
-          href="#top"
-          className="text-xs font-bold text-zinc-400 hover:text-[#f97671] dark:text-zinc-500"
-          aria-label="맨 위로"
-        >
-          맨 위로
-        </a>
-      </div>
+      <h2 className="text-2xl font-black tracking-tight text-zinc-950 dark:text-zinc-50">{SECTION_TITLES[id]}</h2>
       {lead ? <p className="mt-2 text-[15px] leading-7 text-zinc-600 dark:text-zinc-400">{lead}</p> : null}
       <div className="mt-5 space-y-4 text-[15px] leading-7 text-zinc-700 dark:text-zinc-300">{children}</div>
     </section>
@@ -139,6 +141,7 @@ function ColorSwatch({ label, color }: { label: string; color: string }) {
       <span
         className="inline-block h-5 w-5 rounded border border-zinc-300 dark:border-zinc-700"
         style={{ background: color }}
+        aria-hidden="true"
       />
       <code className="text-xs text-zinc-600 dark:text-zinc-400">{label}</code>
     </div>
@@ -158,7 +161,7 @@ function GradientSwatch({ from, to, dir = "to right" }: { from: string; to: stri
 function Step({ n, children }: { n: number; children: ReactNode }) {
   return (
     <li className="flex gap-3">
-      <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[#f97671] text-xs font-black text-white">
+      <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-accent text-xs font-black text-white">
         {n}
       </span>
       <span>{children}</span>
@@ -184,15 +187,15 @@ export default function DocsPage() {
       <header className="sticky top-0 z-20 border-b border-zinc-200 bg-zinc-50/85 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/85">
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-6 py-4">
           <div className="flex items-baseline gap-3">
-            <p className="text-xs font-black uppercase tracking-wider text-[#f97671]">Docs</p>
+            <p className="text-xs font-black uppercase tracking-wider text-accent">Docs</p>
             <h1 className="text-base font-black sm:text-lg">리액션 메뉴판 생성기 사용자 가이드</h1>
           </div>
-          <Link
-            href="/"
-            className="inline-flex h-9 items-center rounded-md border border-zinc-300 bg-white px-3 text-xs font-black text-zinc-900 hover:border-zinc-950 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:hover:border-zinc-300"
-          >
-            생성기로 돌아가기
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link href="/" className="button-secondary h-9 px-3 text-xs">
+              생성기로 돌아가기
+            </Link>
+            <ThemeToggle />
+          </div>
         </div>
       </header>
 
@@ -219,23 +222,7 @@ export default function DocsPage() {
 
         <div className="lg:grid lg:grid-cols-[220px_minmax(0,1fr)] lg:gap-10">
           <aside className="hidden lg:block">
-            <nav className="sticky top-24 max-h-[calc(100vh-7rem)] overflow-y-auto pr-2 text-sm">
-              <p className="mb-3 text-[11px] font-black uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-                목차
-              </p>
-              <ul className="space-y-1">
-                {NAV.map((item) => (
-                  <li key={item.id}>
-                    <a
-                      href={`#${item.id}`}
-                      className="block rounded-md border-l-2 border-transparent px-3 py-1.5 text-zinc-600 transition hover:border-[#f97671] hover:bg-white hover:text-zinc-950 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-zinc-50"
-                    >
-                      {item.label}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </nav>
+            <DocsToc items={NAV} />
           </aside>
 
           <article className="min-w-0">
@@ -249,23 +236,42 @@ export default function DocsPage() {
               </div>
               <ol className="mt-4 space-y-3 text-sm leading-6 text-zinc-700 dark:text-zinc-300">
                 <Step n={1}>
-                  상단 설정에서 <strong>페이지 표시 개수</strong>, <strong>전환 간격</strong>, <strong>폰트</strong>를 먼저 맞춥니다.
+                  왼쪽 테이블에 <strong>count</strong>와 <strong>text</strong>를 입력합니다. count를 비우면 텍스트 전용
+                  줄로 쓸 수 있습니다.
                 </Step>
                 <Step n={2}>
-                  테이블에 <strong>count</strong>와 <strong>text</strong>를 입력합니다. count를 비우면 텍스트 전용 줄로 쓸 수 있습니다.
+                  오른쪽 <strong>출력 설정</strong>에서 페이지 표시 개수, 전환 간격, 폰트, 슬라이더(폰트 크기·Stroke·간격·행
+                  높이)를 조절합니다. 바꾸는 즉시 위의 <strong>실시간 미리보기</strong>에 반영됩니다.
                 </Step>
                 <Step n={3}>
                   색상, 배지, 정렬을 다듬고 필요하면 <strong>일괄 적용</strong>으로 여러 줄에 한 번에 반영합니다.
                 </Step>
                 <Step n={4}>
-                  <strong>새 창 미리보기</strong>로 결과를 확인한 뒤, 미리보기 창에서 <strong>GIF 저장</strong> 또는 <strong>PNG 저장</strong>을 누릅니다.
+                  <strong>새 창 미리보기</strong>로 결과를 확인한 뒤, 미리보기 창에서 <strong>GIF 저장</strong> 또는{" "}
+                  <strong>PNG 저장</strong>을 누릅니다.
                 </Step>
               </ol>
+              <div className="mt-4">
+                <Callout tone="tip" title="자동 저장">
+                  모든 변경은 자동으로 저장됩니다. 화면 상단의 <strong>자동 저장됨</strong> 표시로 저장 상태를 확인할 수
+                  있고, 별도의 저장 버튼은 없습니다.
+                </Callout>
+              </div>
+              <figure className="mt-5">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="/docs/editor-overview.png"
+                  alt="편집 화면: 왼쪽에 리액션 테이블, 오른쪽에 실시간 미리보기와 출력 설정 사이드바"
+                  className="w-full rounded-md border border-zinc-200 dark:border-zinc-800"
+                />
+                <figcaption className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+                  편집 화면 — 왼쪽에서 항목을 편집하고, 오른쪽 실시간 미리보기와 출력 설정으로 결과를 바로 확인합니다.
+                </figcaption>
+              </figure>
             </section>
 
             <Section
               id="outputs"
-              title="출력 종류"
               lead="이 서비스는 방송용 메뉴판 작업에 맞춰 세 가지 결과물을 제공합니다."
             >
               <div className="grid gap-3 sm:grid-cols-3">
@@ -273,12 +279,15 @@ export default function DocsPage() {
                 <KeyValue label="PNG 전체 저장">전체 리스트를 컬럼 형태로 한 장에 정리해서 저장합니다.</KeyValue>
                 <KeyValue label="새 창 미리보기">실제 출력에 가까운 상태를 바로 확인하는 테스트 창입니다.</KeyValue>
               </div>
+              <p>
+                편집 화면 오른쪽에는 <strong>실시간 미리보기</strong>가 항상 함께 표시되어, 저장 전에 결과를 바로 확인할 수
+                있습니다.
+              </p>
             </Section>
 
             <Section
-              id="top-settings"
-              title="1. 상단 설정"
-              lead="메뉴판 전체 분위기와 출력 규칙을 정하는 핵심 옵션입니다."
+              id="settings"
+              lead="편집 화면 오른쪽 사이드바에서 메뉴판 전체 분위기와 출력 규칙을 정합니다."
             >
               <ul className="list-disc space-y-2 pl-5">
                 <li>
@@ -288,23 +297,23 @@ export default function DocsPage() {
                   <strong>전환 간격(초)</strong>: GIF와 미리보기에서 다음 페이지로 넘어가는 시간을 정합니다.
                 </li>
                 <li>
-                  <strong>출력 폰트 / 폰트 크기</strong>: 숫자와 텍스트가 함께 바뀝니다.
+                  <strong>출력 폰트</strong>: 숫자와 텍스트에 함께 적용됩니다.
                 </li>
                 <li>
                   <strong>정렬</strong>: 1번은 왼쪽 정렬, 2번은 오른쪽 정렬입니다.
                 </li>
                 <li>
-                  <strong>Stroke / 기본 간격 / 행 높이</strong>: 가독성과 촘촘함을 크게 좌우합니다.
+                  <strong>폰트 크기 / Stroke / 기본 간격 / 행 높이</strong>: 슬라이더로 조절하며, 실시간 미리보기로 결과를
+                  보면서 맞추면 됩니다.
                 </li>
               </ul>
               <Callout tone="info" title="설정 저장 위치">
-                설정 저장은 서버 저장이 아니라 현재 브라우저의 localStorage에 저장됩니다.
+                설정은 서버가 아니라 현재 브라우저의 localStorage에 자동 저장됩니다.
               </Callout>
             </Section>
 
             <Section
               id="detail-settings"
-              title="2. 상세 설정"
               lead="기본값만으로 부족할 때만 만지는 세부 조정 영역입니다."
             >
               <ul className="list-disc space-y-2 pl-5">
@@ -322,23 +331,24 @@ export default function DocsPage() {
 
             <Section
               id="table"
-              title="3. 테이블 편집"
               lead="실제 리액션 항목을 넣고 다듬는 작업 영역입니다."
             >
               <div className="grid gap-3 sm:grid-cols-2">
-                <KeyValue label="+ 추가">빈 행을 추가합니다.</KeyValue>
+                <KeyValue label="+ 추가">빈 행을 추가합니다. 행을 선택한 상태라면 그 아래에 추가됩니다.</KeyValue>
+                <KeyValue label="가운데 문구 추가">
+                  count와 text 영역을 함께 차지하는 가운데 정렬 문구 행을 추가합니다. 구분선이나 안내 문구에 좋습니다.
+                </KeyValue>
                 <KeyValue label="삭제">체크한 행만 지웁니다.</KeyValue>
-                <KeyValue label="저장 / 새로고침">현재 목록을 저장하거나 저장된 목록을 다시 불러옵니다.</KeyValue>
                 <KeyValue label="드래그">왼쪽 핸들로 순서를 바꿀 수 있습니다.</KeyValue>
               </div>
               <Callout tone="tip" title="텍스트 전용 줄">
-                count를 비우고 text만 넣으면 구분선, 소제목, 안내 문구처럼 사용할 수 있습니다.
+                count를 비우고 text만 넣으면 소제목이나 안내 문구처럼 사용할 수 있습니다. 완전한 가운데 정렬이 필요하면{" "}
+                <strong>가운데 문구 추가</strong>를 사용하세요.
               </Callout>
             </Section>
 
             <Section
               id="colors"
-              title="4. 색상과 그라데이션"
               lead="숫자와 텍스트는 각각 단색 또는 그라데이션으로 설정할 수 있습니다."
             >
               <div className="grid gap-3 sm:grid-cols-2">
@@ -370,7 +380,6 @@ export default function DocsPage() {
 
             <Section
               id="badges"
-              title="5. 배지 설정"
               lead="각 행의 Badge Setting 버튼에서 배지를 켜고, 템플릿을 불러오고, 직접 편집할 수 있습니다."
             >
               <div className="rounded-md border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950">
@@ -395,7 +404,6 @@ export default function DocsPage() {
 
             <Section
               id="bulk"
-              title="6. 일괄 적용"
               lead="여러 줄에 같은 스타일을 빠르게 넣을 때 쓰는 기능입니다."
             >
               <ul className="list-disc space-y-2 pl-5">
@@ -416,7 +424,6 @@ export default function DocsPage() {
 
             <Section
               id="csv"
-              title="7. CSV 업로드 / 다운로드"
               lead="엑셀이나 메모장으로 목록을 관리할 때 가장 편한 방식입니다."
             >
               <div className="overflow-hidden rounded-md border border-zinc-800 bg-zinc-950">
@@ -429,7 +436,8 @@ export default function DocsPage() {
 
               <ul className="list-disc space-y-2 pl-5">
                 <li>
-                  <strong>CSV 업로드</strong>는 현재 목록을 지우고 CSV 내용으로 전체 교체합니다.
+                  <strong>CSV 업로드</strong>는 현재 목록을 지우고 CSV 내용으로 전체 교체합니다. 기존 목록이 있으면 교체
+                  전에 확인 창이 뜹니다.
                 </li>
                 <li>
                   <strong>현재 목록 CSV 다운로드</strong>는 작업 중인 목록을 그대로 파일로 내려받습니다.
@@ -441,6 +449,11 @@ export default function DocsPage() {
                   헤더 <code>count,text</code>는 있어도 되고 없어도 됩니다.
                 </li>
               </ul>
+
+              <Callout tone="warn" title="CSV에 담기는 것">
+                CSV에는 <strong>count와 text만</strong> 담깁니다. 색상, 그라데이션, 배지, 가운데 문구 여부는 CSV로
+                내보내거나 불러올 수 없으니, 스타일은 업로드 후 다시 적용해야 합니다.
+              </Callout>
 
               <Callout tone="warn" title="업로드가 안 될 때">
                 <ul className="list-disc space-y-1 pl-5">
@@ -454,47 +467,53 @@ export default function DocsPage() {
 
             <Section
               id="preview"
-              title="8. 미리보기와 저장"
-              lead="최종 저장 전에 항상 새 창 미리보기로 확인하는 흐름을 추천합니다."
+              lead="실시간 미리보기로 보면서 다듬고, 최종 저장은 새 창 미리보기에서 합니다."
             >
               <div className="grid gap-3 sm:grid-cols-3">
+                <KeyValue label="실시간 미리보기">편집 화면 오른쪽에 항상 표시되는 미리보기입니다. 변경 즉시 갱신됩니다.</KeyValue>
                 <KeyValue label="새 창 미리보기">현재 설정 기준으로 페이지 슬라이드쇼를 보여줍니다.</KeyValue>
-                <KeyValue label="GIF 저장">현재 페이지 순서대로 투명 배경 GIF를 저장합니다.</KeyValue>
-                <KeyValue label="PNG 저장">전체 목록을 컬럼형 한 장 이미지로 저장합니다.</KeyValue>
+                <KeyValue label="GIF / PNG 저장">새 창 미리보기 하단 버튼에서 투명 배경 GIF 또는 컬럼형 PNG를 저장합니다.</KeyValue>
               </div>
               <Callout tone="tip">
-                미리보기는 검수용입니다. 저장된 GIF와 PNG는 미리보기 창 하단 버튼에서 생성합니다.
+                실시간 미리보기는 편집용, 새 창 미리보기는 검수·저장용입니다.
               </Callout>
             </Section>
 
             <Section
               id="storage"
-              title="9. 저장 방식"
               lead="이 서비스는 서버 저장형이 아니라 브라우저 저장형입니다."
             >
               <p>
-                항목 목록, 상단 설정, 상세 설정, 최근 사용 색상, 미리보기용 임시 데이터는 모두 현재 브라우저의 localStorage에 저장됩니다.
-                같은 PC와 같은 브라우저에서는 유지되지만, 다른 브라우저나 다른 PC에서는 자동으로 이어지지 않습니다.
+                항목 목록, 출력 설정, 상세 설정, 최근 사용 색상, 미리보기용 임시 데이터는 모두 현재 브라우저의
+                localStorage에 <strong>자동 저장</strong>됩니다. 같은 PC와 같은 브라우저에서는 유지되지만, 다른 브라우저나
+                다른 PC에서는 자동으로 이어지지 않습니다.
               </p>
               <div className="grid gap-2 sm:grid-cols-2">
                 <KeyValue label="저장되는 것">항목 목록, 폰트, 간격, 정렬, 최근 색상, 미리보기 데이터</KeyValue>
-                <KeyValue label="옮기는 방법">CSV 다운로드 후 다른 환경에서 다시 업로드하면 목록을 옮길 수 있습니다.</KeyValue>
+                <KeyValue label="옮기는 방법">
+                  CSV 다운로드 후 다른 환경에서 다시 업로드하면 목록(count/text)을 옮길 수 있습니다. 색상과 배지는 함께
+                  옮겨지지 않습니다.
+                </KeyValue>
               </div>
             </Section>
 
-            <Section id="faq" title="10. 자주 묻는 질문">
+            <Section id="faq">
               <div className="space-y-3">
-                <FaqItem q="설정 저장은 서버 저장인가요?">
-                  아닙니다. 현재 브라우저의 localStorage에 저장됩니다.
+                <FaqItem q="저장 버튼이 없는데 저장은 어떻게 되나요?">
+                  모든 변경은 자동으로 현재 브라우저의 localStorage에 저장됩니다. 화면 상단의 <strong>자동 저장됨</strong>{" "}
+                  표시로 상태를 확인할 수 있습니다. 서버 저장은 아닙니다.
                 </FaqItem>
                 <FaqItem q="count 없이 text만 입력해도 되나요?">
-                  됩니다. 구분선, 소제목, 안내 문구처럼 쓸 때 유용합니다.
+                  됩니다. 구분선, 소제목, 안내 문구처럼 쓸 때 유용합니다. 완전한 가운데 정렬이 필요하면 가운데 문구 추가를
+                  사용하세요.
                 </FaqItem>
                 <FaqItem q="CSV 업로드가 실패해요.">
-                  CSV인지, 쉼표 구분인지, text 칸이 비어 있지 않은지 먼저 확인해 주세요. 가장 쉬운 방법은 예시 CSV를 내려받아 같은 형식으로 맞추는 것입니다.
+                  CSV인지, 쉼표 구분인지, text 칸이 비어 있지 않은지 먼저 확인해 주세요. 가장 쉬운 방법은 예시 CSV를
+                  내려받아 같은 형식으로 맞추는 것입니다.
                 </FaqItem>
                 <FaqItem q="다른 PC에서도 같은 설정을 쓰고 싶어요.">
-                  현재는 브라우저 저장 방식이라 자동 동기화는 없습니다. 목록은 CSV로 옮길 수 있습니다.
+                  현재는 브라우저 저장 방식이라 자동 동기화는 없습니다. 목록(count/text)은 CSV로 옮길 수 있지만, 색상과
+                  배지 스타일은 함께 옮겨지지 않아 다시 적용해야 합니다.
                 </FaqItem>
                 <FaqItem q="GIF와 PNG는 언제 생성되나요?">
                   새 창 미리보기 안에서 저장 버튼을 눌렀을 때 생성됩니다.
@@ -503,11 +522,28 @@ export default function DocsPage() {
             </Section>
 
             <div className="mt-12 border-t border-zinc-200 pt-6 text-sm text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
-              문의나 기능 제안은 메인 화면 상단의 <strong>문의</strong> 버튼을 이용해 주세요.
+              문의나 기능 제안은{" "}
+              <a
+                href={SUPPORT_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="font-bold text-accent underline underline-offset-2 hover:text-accent-strong"
+              >
+                문의 페이지
+              </a>
+              로 쪽지를 보내 주세요.
             </div>
           </article>
         </div>
       </div>
+
+      <a
+        href="#top"
+        aria-label="맨 위로"
+        className="fixed bottom-6 right-6 z-30 inline-flex h-11 w-11 items-center justify-center rounded-full border border-zinc-300 bg-white text-lg font-black text-zinc-700 shadow-lg transition hover:border-zinc-950 hover:text-zinc-950 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:border-zinc-300 dark:hover:text-zinc-50"
+      >
+        ↑
+      </a>
     </main>
   );
 }

@@ -4,12 +4,10 @@ import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from "rea
 import { BadgeEditor } from "@/components/BadgeEditor";
 import { BadgeFloatingPanel } from "@/components/BadgeFloatingPanel";
 import { ColorInput } from "@/components/ColorInput";
-import {
-  RealtimePreviewPanel,
-  loadRealtimePreviewPanelOpen,
-  saveRealtimePreviewPanelOpen,
-} from "@/components/RealtimePreviewPanel";
+import { Dialog } from "@/components/Dialog";
+import { PreviewDock, loadPreviewDockOpen, savePreviewDockOpen } from "@/components/PreviewDock";
 import { ReactionTable } from "@/components/ReactionTable";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { createReactionItem, useReactionStore } from "@/hooks/useReactionStore";
 import { STYLE_PRESETS } from "@/lib/colorPresets";
 import {
@@ -18,8 +16,10 @@ import {
   createUtf8BomCsvBlob,
   parseReactionCsv,
   readReactionCsvFile,
+  type ParsedReactionCsvRow,
 } from "@/lib/csv";
 import { FONT_PRESETS } from "@/lib/fonts";
+import { SUPPORT_URL } from "@/lib/links";
 import { renderFullMenuPng, renderReactionDataUrls } from "@/lib/renderer";
 import { savePreviewData } from "@/lib/storage";
 import {
@@ -30,16 +30,9 @@ import {
   type TextPaint,
 } from "@/lib/types";
 
-const SUPPORT_URL = "https://www.sooplive.com/station/wjs8679";
-const THEME_KEY = "reaction_theme";
-
 const UI = {
-  ready: "준비되었습니다.",
   previewBuilding: "미리보기를 생성하는 중입니다...",
   previewOpened: "새 창 미리보기를 열었습니다.",
-  settingsSaved: "설정을 저장했습니다.",
-  itemsSaved: "항목 데이터를 저장했습니다.",
-  dataReloaded: "저장한 데이터를 다시 불러왔습니다.",
   deleted: "선택한 항목을 삭제했습니다.",
   fontChanged: "출력 폰트를 변경했습니다.",
   alignLeft: "1번 왼쪽 정렬로 변경했습니다.",
@@ -49,33 +42,30 @@ const UI = {
   loading: "불러오는 중...",
   title: "리액션 메뉴판 생성기",
   subtitle:
-    "정렬, 배지, 색상, 간격, 폰트 크기를 조절하면서 GIF 미리보기와 전체 PNG 출력을 바로 확인할 수 있습니다.",
+    "정렬, 배지, 색상, 간격, 폰트 크기를 조절하면 오른쪽 미리보기에 바로 반영됩니다. 모든 변경은 자동 저장됩니다.",
   support: "문의",
+  saving: "저장 중...",
+  saved: "자동 저장됨",
   pageItems: "페이지 표시 개수",
   fadeInterval: "전환 간격(초)",
   outputFont: "출력 폰트",
   fontSize: "폰트 크기",
-  fontSizeHint: "숫자와 텍스트가 함께 커짐",
   align: "정렬",
   align1: "1번 왼쪽 정렬",
   align2: "2번 오른쪽 정렬",
   stroke: "Stroke 굵기",
   baseGap: "기본 간격",
   rowHeight: "행 높이",
-  saveSettings: "설정 저장",
-  openPreview: "새 창 미리보기",
-  lightMode: "라이트",
-  darkMode: "다크",
+  openPreview: "새 창 미리보기 · GIF/PNG 저장",
+  previewDock: "실시간 미리보기",
+  collapse: "접기",
+  expand: "펼치기",
+  outputSettings: "출력 설정",
   detailSettings: "상세 설정",
   detailHint: "* 웬만하면 건들지 마세요",
   minGap: "최소 간격",
   maxGap: "최대 간격",
   verticalPadding: "상하 여백",
-  range0to24: "범위 0~24px",
-  range36to96: "범위 36~96px",
-  range0to20: "범위 0~20px",
-  range0to32: "범위 0~32px",
-  range0to80: "범위 0~80px",
   csvTitle: "CSV 업로드 / 다운로드",
   csvHint: "count,text 두 컬럼만 있으면 됩니다.",
   csvUpload: "CSV 업로드",
@@ -86,6 +76,10 @@ const UI = {
   csvGuideHeader: "- 헤더는 있어도 되고 없어도 됩니다.",
   csvExampleTitle: "CSV 예시",
   csvExampleFormat: "형식: count,text",
+  csvConfirmTitle: "현재 목록을 교체할까요?",
+  csvConfirmDescription: "CSV 업로드는 지금 편집 중인 목록을 지우고 파일 내용으로 전체 교체합니다.",
+  csvConfirmApply: "전체 교체",
+  csvConfirmCancel: "취소",
   bulkTitle: "일괄 적용",
   bulkCount: "개수 색상",
   bulkText: "텍스트 색상",
@@ -95,9 +89,8 @@ const UI = {
   bulkHint: "* 숫자는 세로, 리액션은 가로 그라데이션이 예쁨",
   noSelectionSuffix: " / 선택이 없으면 전체 적용",
   add: "+ 추가",
+  addCenterText: "가운데 문구 추가",
   remove: "삭제",
-  save: "저장",
-  refresh: "새로고침",
   selected: "선택",
   total: "전체",
   bulkCountLabel: "일괄 개수 색상",
@@ -111,6 +104,11 @@ const UI = {
   badgeDone: "배지를",
   csvReadError: "CSV를 읽는 중 오류가 발생했습니다.",
 } as const;
+
+const SURFACE_CLASS = "border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900";
+const MUTED_CLASS = "text-zinc-500 dark:text-zinc-400";
+const INPUT_CLASS =
+  "border-zinc-300 bg-white text-zinc-950 focus:border-zinc-950 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-white";
 
 function formatCountMessage(template: string, count: number) {
   return template.replace("%d", String(count));
@@ -147,27 +145,42 @@ function DocsIcon() {
   );
 }
 
-function ThemeIcon({ darkMode }: { darkMode: boolean }) {
-  if (darkMode) {
-    return (
-      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-        <path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8Z" />
-      </svg>
-    );
-  }
-
+function SliderField({
+  label,
+  value,
+  min,
+  max,
+  step = 1,
+  unit = "px",
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step?: number;
+  unit?: string;
+  onChange: (value: number) => void;
+}) {
   return (
-    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-      <circle cx="12" cy="12" r="4" />
-      <path d="M12 2v2" />
-      <path d="M12 20v2" />
-      <path d="m4.93 4.93 1.41 1.41" />
-      <path d="m17.66 17.66 1.41 1.41" />
-      <path d="M2 12h2" />
-      <path d="M20 12h2" />
-      <path d="m6.34 17.66-1.41 1.41" />
-      <path d="m19.07 4.93-1.41 1.41" />
-    </svg>
+    <label className="block text-sm font-bold">
+      <span className="flex items-baseline justify-between gap-2">
+        <span>{label}</span>
+        <span className={`font-mono text-xs font-medium ${MUTED_CLASS}`}>
+          {value}
+          {unit}
+        </span>
+      </span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value))}
+        className="mt-1 w-full"
+      />
+    </label>
   );
 }
 
@@ -189,31 +202,19 @@ type ToastState = {
 
 export default function Home() {
   const store = useReactionStore();
-  const [status, setStatus] = useState<string>(UI.ready);
   const [toast, setToast] = useState<ToastState | null>(null);
   const [bulkCountColor, setBulkCountColor] = useState<TextPaint>(DEFAULT_COUNT_COLOR);
   const [bulkTextColor, setBulkTextColor] = useState<TextPaint>(DEFAULT_TEXT_COLOR);
   const [bulkBadges, setBulkBadges] = useState<BadgeConfig[]>([]);
   const [activeBadgeItemId, setActiveBadgeItemId] = useState<string | null>(null);
-  const [realtimePreviewOpen, setRealtimePreviewOpen] = useState(() => loadRealtimePreviewPanelOpen());
-  const [darkMode, setDarkMode] = useState(false);
+  const [previewDockOpen, setPreviewDockOpen] = useState(() => loadPreviewDockOpen());
   const [centerTextModalOpen, setCenterTextModalOpen] = useState(false);
   const [centerTextDraft, setCenterTextDraft] = useState("");
+  const [pendingCsvRows, setPendingCsvRows] = useState<ParsedReactionCsvRow[] | null>(null);
 
   useEffect(() => {
-    const saved = window.localStorage.getItem(THEME_KEY);
-    // The theme hydrates from localStorage after the client mounts.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setDarkMode(saved === "dark");
-  }, []);
-
-  useEffect(() => {
-    window.localStorage.setItem(THEME_KEY, darkMode ? "dark" : "light");
-  }, [darkMode]);
-
-  useEffect(() => {
-    saveRealtimePreviewPanelOpen(realtimePreviewOpen);
-  }, [realtimePreviewOpen]);
+    savePreviewDockOpen(previewDockOpen);
+  }, [previewDockOpen]);
 
   useEffect(() => {
     if (!toast) return;
@@ -260,15 +261,7 @@ export default function Home() {
     ],
   );
 
-  const surfaceClass = darkMode ? "border-zinc-800 bg-zinc-900 text-zinc-100" : "border-zinc-200 bg-white text-zinc-950";
-  const mutedClass = darkMode ? "text-zinc-400" : "text-zinc-500";
-  const inputClass = darkMode
-    ? "border-zinc-700 bg-zinc-950 text-zinc-100 focus:border-white"
-    : "border-zinc-300 bg-white text-zinc-950 focus:border-zinc-950";
-  const subtlePanelClass = darkMode ? "border-zinc-800 bg-zinc-950 text-zinc-300" : "border-zinc-300 bg-zinc-50 text-zinc-600";
-
   const showNotice = useCallback((message: string) => {
-    setStatus(message);
     setToast({ id: Date.now(), message });
   }, []);
 
@@ -324,14 +317,8 @@ export default function Home() {
     );
   };
 
-  const handleCsvImport = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-
-    try {
-      const text = await readReactionCsvFile(file);
-      const rows = parseReactionCsv(text);
+  const applyCsvRows = useCallback(
+    (rows: ParsedReactionCsvRow[]) => {
       const importedItems = rows.map((row) => ({
         ...createReactionItem(),
         count: row.count,
@@ -340,10 +327,28 @@ export default function Home() {
 
       store.replaceItems(importedItems);
       showNotice(formatCountMessage(UI.replacedSuffix, rows.length));
+    },
+    [showNotice, store],
+  );
+
+  const handleCsvImport = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    try {
+      const text = await readReactionCsvFile(file);
+      const rows = parseReactionCsv(text);
+
+      // 기존 목록이 있으면 전체 교체 전에 한 번 확인한다.
+      if (store.items.length > 0) {
+        setPendingCsvRows(rows);
+        return;
+      }
+
+      applyCsvRows(rows);
     } catch (error) {
-      const message = error instanceof Error ? error.message : UI.csvReadError;
-      window.alert(message);
-      showNotice(message);
+      showNotice(error instanceof Error ? error.message : UI.csvReadError);
     }
   };
 
@@ -372,536 +377,450 @@ export default function Home() {
     showNotice("가운데 문구 행을 추가했습니다.");
   };
 
+  const closeCenterTextModal = useCallback(() => {
+    setCenterTextModalOpen(false);
+    setCenterTextDraft("");
+  }, []);
+
+  const closeCsvConfirm = useCallback(() => {
+    setPendingCsvRows(null);
+  }, []);
+
   if (!store.isLoaded) {
-    return <main className="grid min-h-screen place-items-center bg-zinc-50 text-zinc-600">{UI.loading}</main>;
+    return (
+      <main className="grid min-h-screen place-items-center bg-zinc-50 text-zinc-600 dark:bg-zinc-950 dark:text-zinc-400">
+        {UI.loading}
+      </main>
+    );
   }
 
   return (
-    <main className={darkMode ? "min-h-screen bg-zinc-950 text-zinc-100" : "min-h-screen bg-zinc-50 text-zinc-950"}>
-      <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 px-5 py-6">
-        <div
-          className={[
-            "sticky top-0 z-40 -mx-5 flex flex-col gap-4 px-5 pb-3 pt-6 backdrop-blur supports-[backdrop-filter]:bg-opacity-80",
-            darkMode
-              ? "border-b border-zinc-800 bg-zinc-950/92 shadow-[0_10px_30px_rgba(0,0,0,0.28)]"
-              : "border-b border-zinc-200 bg-zinc-50/92 shadow-[0_10px_30px_rgba(15,23,42,0.08)]",
-          ].join(" ")}
-        >
-        <header className="flex flex-col gap-3">
-          <div className="flex flex-wrap items-end justify-between gap-4">
-            <div className="flex flex-wrap items-center gap-3">
-              <div>
-                <p className="text-sm font-bold text-[#f97671]">Reaction Menu Maker</p>
-                <h1 className="text-3xl font-black">{UI.title}</h1>
-              </div>
-              <a
-                href="/docs"
-                className={darkMode
-                  ? "inline-flex h-10 items-center gap-2 rounded-md border border-zinc-700 bg-zinc-900 px-4 text-sm font-black text-zinc-100 hover:border-zinc-400"
-                  : "inline-flex h-10 items-center gap-2 rounded-md border border-zinc-300 bg-white px-4 text-sm font-black text-zinc-900 hover:border-zinc-950"}
-              >
-                <DocsIcon />
-                Docs
-              </a>
-              <a
-                href={SUPPORT_URL}
-                target="_blank"
-                rel="noreferrer"
-                className={darkMode
-                  ? "inline-flex h-10 items-center gap-2 rounded-md border border-zinc-700 bg-zinc-900 px-4 text-sm font-black text-zinc-100 hover:border-zinc-400"
-                  : "inline-flex h-10 items-center gap-2 rounded-md border border-zinc-300 bg-white px-4 text-sm font-black text-zinc-900 hover:border-zinc-950"}
-              >
-                <HomeIcon />
-                {UI.support}
-              </a>
+    <main className="min-h-screen bg-zinc-50 text-zinc-950 dark:bg-zinc-950 dark:text-zinc-100">
+      <header className="sticky top-0 z-40 border-b border-zinc-200 bg-zinc-50/92 backdrop-blur supports-[backdrop-filter]:bg-opacity-80 dark:border-zinc-800 dark:bg-zinc-950/92">
+        <div className="mx-auto flex w-full max-w-[1700px] flex-wrap items-center gap-x-4 gap-y-2 px-5 py-3">
+          <div className="min-w-0">
+            <p className="text-[11px] font-bold uppercase tracking-wide text-accent">Reaction Menu Maker</p>
+            <h1 className="text-xl font-black leading-tight">{UI.title}</h1>
+          </div>
+          <p className="rounded-md bg-zinc-950 px-3 py-1.5 text-xs font-bold text-white dark:bg-zinc-100 dark:text-zinc-950">
+            리액션 {store.items.length}개 / {pagesCount}페이지
+          </p>
+          <span
+            aria-live="polite"
+            className={`text-xs font-bold ${store.saveState === "saving" ? "text-amber-600 dark:text-amber-400" : MUTED_CLASS}`}
+          >
+            {store.saveState === "saving" ? UI.saving : UI.saved}
+          </span>
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <a href="/docs" className="button-secondary h-9 px-3 text-xs">
+              <DocsIcon />
+              Docs
+            </a>
+            <a href={SUPPORT_URL} target="_blank" rel="noreferrer" className="button-secondary h-9 px-3 text-xs">
+              <HomeIcon />
+              {UI.support}
+            </a>
+            <ThemeToggle />
+          </div>
+        </div>
+      </header>
+
+      <div className="mx-auto w-full max-w-[1700px] px-5 py-6">
+        <p className={`mb-5 max-w-3xl text-sm leading-6 ${MUTED_CLASS}`}>
+          {UI.subtitle} 버그 및 기능개선 의견은 문의 버튼을 눌러서 쪽지 주시면 감사하겠습니다.
+        </p>
+
+        <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
+          <div className="min-w-0 space-y-6">
+            <section className={`flex flex-wrap items-center gap-2 rounded-md border p-3 ${SURFACE_CLASS}`}>
+              <button type="button" onClick={store.addItem} className="button-primary h-9 px-3 text-xs">
+                {UI.add}
+              </button>
               <button
                 type="button"
-                onClick={() => setDarkMode((prev) => !prev)}
-                className={darkMode
-                  ? "inline-flex h-10 items-center gap-2 rounded-md border border-zinc-700 bg-zinc-900 px-4 text-sm font-black text-zinc-100 hover:border-zinc-400"
-                  : "inline-flex h-10 items-center gap-2 rounded-md border border-zinc-300 bg-white px-4 text-sm font-black text-zinc-900 hover:border-zinc-950"}
+                onClick={() => setCenterTextModalOpen(true)}
+                className="button-secondary h-9 px-3 text-xs"
               >
-                <ThemeIcon darkMode={darkMode} />
-                {darkMode ? UI.lightMode : UI.darkMode}
+                {UI.addCenterText}
               </button>
-            </div>
-            <p className="rounded-md bg-zinc-950 px-4 py-2 text-sm font-bold text-white">
-              리액션 {store.items.length}개 / {pagesCount}페이지
-            </p>
-          </div>
-          <div className={`max-w-3xl space-y-1 text-sm leading-6 ${mutedClass}`}>
-            <p>{UI.subtitle}</p>
-            <p>버그 및 기능개선 및 좋은의견은 문의 버튼을 눌러서 쪽지 주시면 감사하겠습니다.</p>
-          </div>
-        </header>
+              <button
+                type="button"
+                onClick={() => {
+                  store.deleteSelected();
+                  showNotice(UI.deleted);
+                }}
+                disabled={store.selectedCount === 0}
+                className="button-secondary h-9 px-3 text-xs"
+              >
+                {UI.remove}
+              </button>
+              <span className={`ml-auto text-xs font-bold ${MUTED_CLASS}`}>
+                {UI.selected} {store.selectedCount}개 / {UI.total} {store.items.length}개
+              </span>
+            </section>
 
-        <section className={`flex flex-wrap items-center gap-3 rounded-md border p-4 ${surfaceClass}`}>
-          <label className="flex items-center gap-2 text-sm font-bold">
-            {UI.pageItems}
-            <input
-              type="number"
-              min={1}
-              max={60}
-              value={store.itemsPerPage}
-              onChange={(event) => store.setItemsPerPage(Math.max(1, Number(event.target.value)))}
-              className={`h-10 w-24 rounded-md border px-3 font-mono outline-none ${inputClass}`}
+            <ReactionTable
+              items={store.items}
+              selectedIds={store.selectedIds}
+              allSelected={store.allSelected}
+              activeBadgeItemId={activeBadgeItemId}
+              onToggleAll={store.toggleAll}
+              onToggleSelected={store.toggleSelected}
+              onUpdateItem={store.updateItem}
+              onMoveItem={store.moveItem}
+              onOpenBadgePanel={setActiveBadgeItemId}
             />
-          </label>
 
-          <label className="flex items-center gap-2 text-sm font-bold">
-            {UI.fadeInterval}
-            <input
-              type="number"
-              min={1}
-              max={120}
-              value={store.fadeInterval}
-              onChange={(event) => store.setFadeInterval(Math.max(1, Number(event.target.value)))}
-              className={`h-10 w-24 rounded-md border px-3 font-mono outline-none ${inputClass}`}
-            />
-          </label>
+            <section className={`rounded-md border p-4 ${SURFACE_CLASS}`}>
+              <div className="mb-3 flex flex-wrap items-center gap-3">
+                <h2 className="text-sm font-black">{UI.bulkTitle}</h2>
+                <span className={`text-sm ${MUTED_CLASS}`}>
+                  {UI.selected} {store.selectedCount}개
+                  {store.selectedCount === 0 ? UI.noSelectionSuffix : ""}
+                </span>
+              </div>
+              <p className={`mb-4 text-sm ${MUTED_CLASS}`}>{UI.bulkHint}</p>
 
-          <label className="flex items-center gap-2 text-sm font-bold">
-            {UI.outputFont}
-            <select
-              value={store.fontPreset}
-              onChange={(event) => {
-                store.setFontPreset(event.target.value as typeof store.fontPreset);
-                showNotice(UI.fontChanged);
-              }}
-              className={`h-10 min-w-52 rounded-md border px-3 text-sm outline-none ${inputClass}`}
-            >
-              {FONT_PRESETS.map((preset) => (
-                <option key={preset.id} value={preset.id}>
-                  {preset.label} / {preset.description}
-                </option>
-              ))}
-            </select>
-          </label>
+              <div className="mb-4 grid gap-4 xl:grid-cols-2">
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="text-sm font-bold">{UI.bulkCount}</span>
+                  <ColorInput label={UI.bulkCountLabel} value={bulkCountColor} onChange={setBulkCountColor} />
+                  <button type="button" onClick={applyBulkCountColor} className="button-secondary">
+                    {UI.bulkCountApply}
+                  </button>
+                </div>
 
-          <label className="flex items-center gap-2 text-sm font-bold">
-            {UI.fontSize}
-            <input
-              type="number"
-              min={18}
-              max={44}
-              step={1}
-              value={store.fontSize}
-              onChange={(event) => store.setFontSize(Math.max(18, Math.min(44, Number(event.target.value) || 18)))}
-              className={`h-10 w-20 rounded-md border px-3 font-mono outline-none ${inputClass}`}
-            />
-            <span className={`text-xs font-medium ${mutedClass}`}>{UI.fontSizeHint}</span>
-          </label>
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="text-sm font-bold">{UI.bulkText}</span>
+                  <ColorInput label={UI.bulkTextLabel} value={bulkTextColor} onChange={setBulkTextColor} />
+                  <button type="button" onClick={applyBulkTextColor} className="button-secondary">
+                    {UI.bulkTextApply}
+                  </button>
+                </div>
+              </div>
 
-          <label className="flex items-center gap-2 text-sm font-bold">
-            {UI.align}
-            <select
-              value={store.contentAlign}
-              onChange={(event) => {
-                store.setContentAlign(event.target.value as typeof store.contentAlign);
-                showNotice(event.target.value === "left" ? UI.alignLeft : UI.alignRight);
-              }}
-              className={`h-10 min-w-44 rounded-md border px-3 text-sm outline-none ${inputClass}`}
-            >
-              <option value="left">{UI.align1}</option>
-              <option value="right">{UI.align2}</option>
-            </select>
-          </label>
+              <div className="mb-4 flex flex-wrap items-start gap-3">
+                <div className="flex min-w-[320px] flex-1 flex-wrap items-center gap-3">
+                  <span className="text-sm font-bold">배지</span>
+                  <BadgeEditor value={bulkBadges} onChange={setBulkBadges} />
+                  <button type="button" onClick={applyBulkBadges} className="button-secondary">
+                    배지 적용
+                  </button>
+                </div>
 
-          <label className="flex items-center gap-2 text-sm font-bold">
-            {UI.stroke}
-            <input
-              type="number"
-              min={0.5}
-              max={8}
-              step={0.1}
-              value={store.strokeWidth}
-              onChange={(event) => store.setStrokeWidth(Math.max(0.5, Math.min(8, Number(event.target.value) || 0.5)))}
-              className={`h-10 w-24 rounded-md border px-3 font-mono outline-none ${inputClass}`}
-            />
-          </label>
+                <div className="flex items-center">
+                  <button type="button" onClick={applyBulkBothColors} className="button-primary">
+                    {UI.bulkBothApply}
+                  </button>
+                </div>
+              </div>
 
-          <label className="flex items-center gap-2 text-sm font-bold">
-            {UI.baseGap}
-            <input
-              type="number"
-              min={0}
-              max={24}
-              step={1}
-              value={store.gapBase}
-              onChange={(event) => store.setGapBase(Math.max(0, Math.min(24, Number(event.target.value) || 0)))}
-              className={`h-10 w-20 rounded-md border px-3 font-mono outline-none ${inputClass}`}
-            />
-            <span className={`text-xs font-medium ${mutedClass}`}>{UI.range0to24}</span>
-          </label>
+              <div className="flex flex-wrap gap-2">
+                {STYLE_PRESETS.map((preset) => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => applyStylePreset(preset.id)}
+                    className="flex items-center gap-2 rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm font-bold text-zinc-800 hover:border-zinc-950 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:hover:border-zinc-400"
+                  >
+                    <span className="flex gap-1" aria-hidden="true">
+                      <span
+                        className="h-5 w-5 rounded border border-zinc-300 dark:border-zinc-700"
+                        style={{
+                          background:
+                            preset.countColor.mode === "solid"
+                              ? preset.countColor.color
+                              : `linear-gradient(${preset.countColor.direction === "vertical" ? "180deg" : "90deg"}, ${preset.countColor.from}, ${preset.countColor.to})`,
+                        }}
+                      />
+                      <span
+                        className="h-5 w-5 rounded border border-zinc-300 dark:border-zinc-700"
+                        style={{
+                          background:
+                            preset.textColor.mode === "solid"
+                              ? preset.textColor.color
+                              : `linear-gradient(${preset.textColor.direction === "vertical" ? "180deg" : "90deg"}, ${preset.textColor.from}, ${preset.textColor.to})`,
+                        }}
+                      />
+                    </span>
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+            </section>
 
-          <label className="flex items-center gap-2 text-sm font-bold">
-            {UI.rowHeight}
-            <input
-              type="number"
-              min={36}
-              max={96}
-              step={1}
-              value={store.rowHeight}
-              onChange={(event) => store.setRowHeight(Math.max(36, Math.min(96, Number(event.target.value) || 36)))}
-              className={`h-10 w-20 rounded-md border px-3 font-mono outline-none ${inputClass}`}
-            />
-            <span className={`text-xs font-medium ${mutedClass}`}>{UI.range36to96}</span>
-          </label>
+            <details className={`rounded-md border ${SURFACE_CLASS}`} open={false}>
+              <summary className="cursor-pointer px-4 py-3 text-sm font-bold">
+                {UI.csvTitle} <span className={`ml-2 text-xs font-medium ${MUTED_CLASS}`}>{UI.csvHint}</span>
+              </summary>
+              <div className="grid gap-4 border-t border-zinc-200 p-4 lg:grid-cols-[minmax(0,1fr)_360px] dark:border-zinc-800">
+                <div className="space-y-4">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <label className="button-primary relative inline-flex items-center overflow-hidden">
+                      <span>{UI.csvUpload}</span>
+                      <input
+                        id="reaction-csv-upload"
+                        type="file"
+                        accept=".csv,text/csv"
+                        onChange={handleCsvImport}
+                        aria-label="CSV 업로드"
+                        className="absolute inset-0 cursor-pointer opacity-0"
+                      />
+                    </label>
+                    <button type="button" onClick={downloadCurrentCsv} className="button-secondary">
+                      {UI.csvDownloadCurrent}
+                    </button>
+                    <button type="button" onClick={downloadCsvExample} className="button-secondary">
+                      {UI.csvExampleDownload}
+                    </button>
+                  </div>
 
-          <button
-            type="button"
-            onClick={() => {
-              store.saveSettings();
-              showNotice(UI.settingsSaved);
-            }}
-            className={darkMode ? "h-10 rounded-md border border-zinc-700 px-4 text-sm font-bold hover:border-zinc-400" : "h-10 rounded-md border border-zinc-300 px-4 text-sm font-bold hover:border-zinc-950"}
-          >
-            {UI.saveSettings}
-          </button>
+                  <div className="rounded-md border border-dashed border-zinc-300 bg-zinc-50 p-4 text-sm text-zinc-600 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300">
+                    <p className="font-bold text-zinc-800 dark:text-zinc-100">{UI.csvGuide}</p>
+                    <ul className="mt-2 space-y-1">
+                      <li>{UI.csvGuideReplace}</li>
+                      <li>{UI.csvGuideHeader}</li>
+                    </ul>
+                  </div>
+                </div>
 
-          <button
-            type="button"
-            onClick={openPreview}
-            className="h-10 rounded-md bg-[#00c853] px-4 text-sm font-black text-white hover:bg-[#00a846]"
-          >
-            {UI.openPreview}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setRealtimePreviewOpen((prev) => !prev)}
-            className="h-10 rounded-md border border-zinc-300 px-4 text-sm font-bold hover:border-zinc-950 dark:border-zinc-700 dark:hover:border-zinc-300"
-          >
-            {realtimePreviewOpen ? "실시간 미리보기 닫기" : "실시간 미리보기"}
-          </button>
-
-          <div
-            className={
-              darkMode
-                ? "flex flex-wrap items-center gap-2 rounded-md border border-zinc-700 bg-zinc-950/70 px-3 py-2"
-                : "flex flex-wrap items-center gap-2 rounded-md border border-zinc-300 bg-white/85 px-3 py-2"
-            }
-          >
-            <span className={`text-xs font-black ${mutedClass}`}>행 옵션</span>
-            <button type="button" onClick={store.addItem} className="button-primary h-9 px-3 text-xs">
-              {UI.add}
-            </button>
-            <button
-              type="button"
-              onClick={() => setCenterTextModalOpen(true)}
-              className="button-secondary h-9 px-3 text-xs"
-            >
-              가운데 문구 추가
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                store.deleteSelected();
-                showNotice(UI.deleted);
-              }}
-              disabled={store.selectedCount === 0}
-              className="button-secondary h-9 px-3 text-xs disabled:cursor-not-allowed disabled:opacity-45"
-            >
-              {UI.remove}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                store.saveOnlyItems();
-                showNotice(UI.itemsSaved);
-              }}
-              className="button-secondary h-9 px-3 text-xs"
-            >
-              {UI.save}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                store.reload();
-                showNotice(UI.dataReloaded);
-              }}
-              className="button-secondary h-9 px-3 text-xs"
-            >
-              {UI.refresh}
-            </button>
-            <span className={`text-xs font-bold ${mutedClass}`}>
-              {UI.selected} {store.selectedCount}개 / {UI.total} {store.items.length}개
-            </span>
+                <div className="rounded-md border border-zinc-200 bg-zinc-950 p-4 text-sm text-zinc-100 dark:border-zinc-800">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <p className="font-bold">{UI.csvExampleTitle}</p>
+                    <span className="text-xs text-zinc-400">{UI.csvExampleFormat}</span>
+                  </div>
+                  <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-md bg-black/40 p-3 font-mono text-xs leading-6">
+                    {csvExample}
+                  </pre>
+                </div>
+              </div>
+            </details>
           </div>
 
-          <span className={`ml-auto text-sm font-medium ${mutedClass}`}>{status}</span>
-        </section>
-        </div>
+          <aside className="min-w-0 space-y-4 xl:sticky xl:top-[86px]">
+            <section className={`rounded-md border ${SURFACE_CLASS}`}>
+              <div className="flex items-center justify-between gap-3 px-4 py-3">
+                <h2 className="text-sm font-black">{UI.previewDock}</h2>
+                <button
+                  type="button"
+                  onClick={() => setPreviewDockOpen((prev) => !prev)}
+                  className="button-ghost h-8 px-2 text-xs"
+                >
+                  {previewDockOpen ? UI.collapse : UI.expand}
+                </button>
+              </div>
+              {previewDockOpen ? (
+                <div className="px-4 pb-4">
+                  <PreviewDock items={store.items} options={renderOptions} />
+                </div>
+              ) : null}
+              <div className="border-t border-zinc-200 px-4 py-3 dark:border-zinc-800">
+                <button type="button" onClick={openPreview} className="button-primary w-full">
+                  {UI.openPreview}
+                </button>
+              </div>
+            </section>
 
-        <details className={`rounded-md border ${surfaceClass}`} open={false}>
-          <summary className="cursor-pointer px-4 py-3 text-sm font-bold">
-            {UI.detailSettings} <span className={`ml-2 text-xs font-medium ${mutedClass}`}>{UI.detailHint}</span>
-          </summary>
-          <div className={darkMode ? "flex flex-wrap items-center gap-3 border-t border-zinc-800 px-4 py-4" : "flex flex-wrap items-center gap-3 border-t border-zinc-200 px-4 py-4"}>
-            <label className="flex items-center gap-2 text-sm font-bold">
-              {UI.minGap}
-              <input
-                type="number"
-                min={0}
-                max={20}
-                step={1}
-                value={store.gapMin}
-                onChange={(event) => store.setGapMin(Math.max(0, Math.min(20, Number(event.target.value) || 0)))}
-                className={`h-10 w-20 rounded-md border px-3 font-mono outline-none ${inputClass}`}
-              />
-              <span className={`text-xs font-medium ${mutedClass}`}>{UI.range0to20}</span>
-            </label>
+            <section className={`space-y-4 rounded-md border p-4 ${SURFACE_CLASS}`}>
+              <h2 className="text-sm font-black">{UI.outputSettings}</h2>
 
-            <label className="flex items-center gap-2 text-sm font-bold">
-              {UI.maxGap}
-              <input
-                type="number"
-                min={0}
-                max={32}
-                step={1}
-                value={store.gapMax}
-                onChange={(event) => store.setGapMax(Math.max(0, Math.min(32, Number(event.target.value) || 0)))}
-                className={`h-10 w-20 rounded-md border px-3 font-mono outline-none ${inputClass}`}
-              />
-              <span className={`text-xs font-medium ${mutedClass}`}>{UI.range0to32}</span>
-            </label>
-
-            <label className="flex items-center gap-2 text-sm font-bold">
-              {UI.verticalPadding}
-              <input
-                type="number"
-                min={0}
-                max={80}
-                step={1}
-                value={store.verticalPadding}
-                onChange={(event) =>
-                  store.setVerticalPadding(Math.max(0, Math.min(80, Number(event.target.value) || 0)))
-                }
-                className={`h-10 w-20 rounded-md border px-3 font-mono outline-none ${inputClass}`}
-              />
-              <span className={`text-xs font-medium ${mutedClass}`}>{UI.range0to80}</span>
-            </label>
-          </div>
-        </details>
-
-        <details className={`rounded-md border ${surfaceClass}`} open={false}>
-          <summary className="cursor-pointer px-4 py-3 text-sm font-bold">
-            {UI.csvTitle} <span className={`ml-2 text-xs font-medium ${mutedClass}`}>{UI.csvHint}</span>
-          </summary>
-          <div className={darkMode ? "grid gap-4 border-t border-zinc-800 p-4 lg:grid-cols-[minmax(0,1fr)_360px]" : "grid gap-4 border-t border-zinc-200 p-4 lg:grid-cols-[minmax(0,1fr)_360px]"}>
-            <div className="space-y-4">
-              <div className="flex flex-wrap items-center gap-3">
-                <label className="button-primary relative inline-flex items-center overflow-hidden">
-                  <span>{UI.csvUpload}</span>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block text-sm font-bold">
+                  {UI.pageItems}
                   <input
-                    id="reaction-csv-upload"
-                    type="file"
-                    accept=".csv,text/csv"
-                    onChange={handleCsvImport}
-                    aria-label="CSV 업로드"
-                    className="absolute inset-0 cursor-pointer opacity-0"
+                    type="number"
+                    min={1}
+                    max={60}
+                    value={store.itemsPerPage}
+                    onChange={(event) => store.setItemsPerPage(Math.max(1, Number(event.target.value)))}
+                    className={`mt-1 h-10 w-full rounded-md border px-3 font-mono outline-none ${INPUT_CLASS}`}
                   />
                 </label>
-                <button type="button" onClick={downloadCurrentCsv} className="button-secondary">
-                  {UI.csvDownloadCurrent}
-                </button>
-                <button type="button" onClick={downloadCsvExample} className="button-secondary">
-                  {UI.csvExampleDownload}
-                </button>
-              </div>
 
-              <div className={`rounded-md border border-dashed p-4 text-sm ${subtlePanelClass}`}>
-                <p className={darkMode ? "font-bold text-zinc-100" : "font-bold text-zinc-800"}>{UI.csvGuide}</p>
-                <ul className="mt-2 space-y-1">
-                  <li>{UI.csvGuideReplace}</li>
-                  <li>{UI.csvGuideHeader}</li>
-                </ul>
-              </div>
-            </div>
-
-            <div className={darkMode ? "rounded-md border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-100" : "rounded-md border border-zinc-200 bg-zinc-950 p-4 text-sm text-zinc-100"}>
-              <div className="mb-2 flex items-center justify-between gap-3">
-                <p className="font-bold">{UI.csvExampleTitle}</p>
-                <span className="text-xs text-zinc-400">{UI.csvExampleFormat}</span>
-              </div>
-              <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-md bg-black/40 p-3 font-mono text-xs leading-6">
-                {csvExample}
-              </pre>
-            </div>
-          </div>
-        </details>
-
-        <section className={`rounded-md border p-4 ${surfaceClass}`}>
-          <div className="mb-3 flex flex-wrap items-center gap-3">
-            <h2 className="text-sm font-black">{UI.bulkTitle}</h2>
-            <span className={`text-sm ${mutedClass}`}>
-              {UI.selected} {store.selectedCount}개
-              {store.selectedCount === 0 ? UI.noSelectionSuffix : ""}
-            </span>
-          </div>
-          <p className={`mb-4 text-sm ${mutedClass}`}>{UI.bulkHint}</p>
-
-          <div className="mb-4 grid gap-4 xl:grid-cols-2">
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="text-sm font-bold">{UI.bulkCount}</span>
-              <ColorInput label={UI.bulkCountLabel} value={bulkCountColor} onChange={setBulkCountColor} />
-              <button type="button" onClick={applyBulkCountColor} className="button-secondary">
-                {UI.bulkCountApply}
-              </button>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="text-sm font-bold">{UI.bulkText}</span>
-              <ColorInput label={UI.bulkTextLabel} value={bulkTextColor} onChange={setBulkTextColor} />
-              <button type="button" onClick={applyBulkTextColor} className="button-secondary">
-                {UI.bulkTextApply}
-              </button>
-            </div>
-          </div>
-
-          <div className="mb-4 flex flex-wrap items-start gap-3">
-            <div className="flex min-w-[320px] flex-1 flex-wrap items-center gap-3">
-              <span className="text-sm font-bold">배지</span>
-              <BadgeEditor value={bulkBadges} onChange={setBulkBadges} />
-              <button type="button" onClick={applyBulkBadges} className="button-secondary">
-                배지 적용
-              </button>
-            </div>
-
-            <div className="flex items-center">
-              <button type="button" onClick={applyBulkBothColors} className="button-primary">
-                {UI.bulkBothApply}
-              </button>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            {STYLE_PRESETS.map((preset) => (
-              <button
-                key={preset.id}
-                type="button"
-                onClick={() => applyStylePreset(preset.id)}
-                className={darkMode
-                  ? "flex items-center gap-2 rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm font-bold text-zinc-100 hover:border-zinc-400"
-                  : "flex items-center gap-2 rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm font-bold text-zinc-800 hover:border-zinc-950"}
-              >
-                <span className="flex gap-1">
-                  <span
-                    className="h-5 w-5 rounded border border-zinc-300"
-                    style={{
-                      background:
-                        preset.countColor.mode === "solid"
-                          ? preset.countColor.color
-                          : `linear-gradient(${preset.countColor.direction === "vertical" ? "180deg" : "90deg"}, ${preset.countColor.from}, ${preset.countColor.to})`,
-                    }}
+                <label className="block text-sm font-bold">
+                  {UI.fadeInterval}
+                  <input
+                    type="number"
+                    min={1}
+                    max={120}
+                    value={store.fadeInterval}
+                    onChange={(event) => store.setFadeInterval(Math.max(1, Number(event.target.value)))}
+                    className={`mt-1 h-10 w-full rounded-md border px-3 font-mono outline-none ${INPUT_CLASS}`}
                   />
-                  <span
-                    className="h-5 w-5 rounded border border-zinc-300"
-                    style={{
-                      background:
-                        preset.textColor.mode === "solid"
-                          ? preset.textColor.color
-                          : `linear-gradient(${preset.textColor.direction === "vertical" ? "180deg" : "90deg"}, ${preset.textColor.from}, ${preset.textColor.to})`,
-                    }}
-                  />
-                </span>
-                {preset.label}
-              </button>
-            ))}
-          </div>
-        </section>
+                </label>
+              </div>
 
-        <ReactionTable
-          items={store.items}
-          selectedIds={store.selectedIds}
-          allSelected={store.allSelected}
-          activeBadgeItemId={activeBadgeItemId}
-          onToggleAll={store.toggleAll}
-          onToggleSelected={store.toggleSelected}
-          onUpdateItem={store.updateItem}
-          onMoveItem={store.moveItem}
-          onOpenBadgePanel={setActiveBadgeItemId}
-        />
+              <label className="block text-sm font-bold">
+                {UI.outputFont}
+                <select
+                  value={store.fontPreset}
+                  onChange={(event) => {
+                    store.setFontPreset(event.target.value as typeof store.fontPreset);
+                    showNotice(UI.fontChanged);
+                  }}
+                  className={`mt-1 h-10 w-full rounded-md border px-3 text-sm outline-none ${INPUT_CLASS}`}
+                >
+                  {FONT_PRESETS.map((preset) => (
+                    <option key={preset.id} value={preset.id}>
+                      {preset.label} / {preset.description}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="block text-sm font-bold">
+                {UI.align}
+                <select
+                  value={store.contentAlign}
+                  onChange={(event) => {
+                    store.setContentAlign(event.target.value as typeof store.contentAlign);
+                    showNotice(event.target.value === "left" ? UI.alignLeft : UI.alignRight);
+                  }}
+                  className={`mt-1 h-10 w-full rounded-md border px-3 text-sm outline-none ${INPUT_CLASS}`}
+                >
+                  <option value="left">{UI.align1}</option>
+                  <option value="right">{UI.align2}</option>
+                </select>
+              </label>
+
+              <SliderField
+                label={UI.fontSize}
+                value={store.fontSize}
+                min={18}
+                max={44}
+                onChange={(value) => store.setFontSize(value)}
+              />
+              <SliderField
+                label={UI.stroke}
+                value={store.strokeWidth}
+                min={0.5}
+                max={8}
+                step={0.1}
+                onChange={(value) => store.setStrokeWidth(value)}
+              />
+              <SliderField
+                label={UI.baseGap}
+                value={store.gapBase}
+                min={0}
+                max={24}
+                onChange={(value) => store.setGapBase(value)}
+              />
+              <SliderField
+                label={UI.rowHeight}
+                value={store.rowHeight}
+                min={36}
+                max={96}
+                onChange={(value) => store.setRowHeight(value)}
+              />
+            </section>
+
+            <details className={`rounded-md border ${SURFACE_CLASS}`} open={false}>
+              <summary className="cursor-pointer px-4 py-3 text-sm font-bold">
+                {UI.detailSettings} <span className={`ml-2 text-xs font-medium ${MUTED_CLASS}`}>{UI.detailHint}</span>
+              </summary>
+              <div className="space-y-4 border-t border-zinc-200 px-4 py-4 dark:border-zinc-800">
+                <SliderField
+                  label={UI.minGap}
+                  value={store.gapMin}
+                  min={0}
+                  max={20}
+                  onChange={(value) => store.setGapMin(value)}
+                />
+                <SliderField
+                  label={UI.maxGap}
+                  value={store.gapMax}
+                  min={0}
+                  max={32}
+                  onChange={(value) => store.setGapMax(value)}
+                />
+                <SliderField
+                  label={UI.verticalPadding}
+                  value={store.verticalPadding}
+                  min={0}
+                  max={80}
+                  onChange={(value) => store.setVerticalPadding(value)}
+                />
+              </div>
+            </details>
+          </aside>
+        </div>
       </div>
+
       {activeBadgeItem ? (
         <BadgeFloatingPanel
           key={activeBadgeItem.id}
-          title={activeBadgeItem.text.trim() ? activeBadgeItem.text : `리액션 #${store.items.findIndex((item) => item.id === activeBadgeItem.id) + 1}`}
+          title={
+            activeBadgeItem.text.trim()
+              ? activeBadgeItem.text
+              : `리액션 #${store.items.findIndex((item) => item.id === activeBadgeItem.id) + 1}`
+          }
           value={activeBadgeItem.badges}
           onChange={(badges) => store.updateItem(activeBadgeItem.id, { badges })}
           onClose={() => setActiveBadgeItemId(null)}
         />
       ) : null}
-      {realtimePreviewOpen ? (
-        <RealtimePreviewPanel
-          items={store.items}
-          options={renderOptions}
-          onClose={() => setRealtimePreviewOpen(false)}
-        />
-      ) : null}
+
       {toast ? (
         <div className="pointer-events-none fixed bottom-5 right-5 z-[1300] max-w-sm">
-          <div
-            className={
-              darkMode
-                ? "rounded-md border border-zinc-700 bg-zinc-900/95 px-4 py-3 text-sm font-bold text-zinc-100 shadow-2xl backdrop-blur"
-                : "rounded-md border border-zinc-200 bg-white/95 px-4 py-3 text-sm font-bold text-zinc-900 shadow-2xl backdrop-blur"
-            }
-          >
+          <div className="rounded-md border border-zinc-200 bg-white/95 px-4 py-3 text-sm font-bold text-zinc-900 shadow-2xl backdrop-blur dark:border-zinc-700 dark:bg-zinc-900/95 dark:text-zinc-100">
             {toast.message}
           </div>
         </div>
       ) : null}
+
       {centerTextModalOpen ? (
-        <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/45 p-4">
-          <div className="w-full max-w-md rounded-lg border border-zinc-300 bg-white p-5 shadow-2xl dark:border-zinc-700 dark:bg-zinc-900">
-            <div className="mb-4">
-              <h2 className="text-lg font-black text-zinc-950 dark:text-zinc-50">가운데 문구 추가</h2>
-              <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                count와 reaction text 영역을 함께 차지하는 가운데 정렬 문구 행을 추가합니다.
-              </p>
-            </div>
+        <Dialog
+          title="가운데 문구 추가"
+          description="count와 reaction text 영역을 함께 차지하는 가운데 정렬 문구 행을 추가합니다."
+          onClose={closeCenterTextModal}
+        >
+          <label className="block text-sm font-bold text-zinc-700 dark:text-zinc-200">
+            문구
+            <input
+              data-autofocus
+              value={centerTextDraft}
+              onChange={(event) => setCenterTextDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") addCenterTextRow();
+              }}
+              placeholder="예: ▶ 이벤트 안내 문구"
+              className={`mt-2 h-10 w-full rounded-md border px-3 outline-none ${INPUT_CLASS}`}
+            />
+          </label>
 
-            <label className="block text-sm font-bold text-zinc-700 dark:text-zinc-200">
-              문구
-              <input
-                autoFocus
-                value={centerTextDraft}
-                onChange={(event) => setCenterTextDraft(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") addCenterTextRow();
-                  if (event.key === "Escape") {
-                    setCenterTextModalOpen(false);
-                    setCenterTextDraft("");
-                  }
-                }}
-                placeholder="예: ▶ 이벤트 안내 문구"
-                className="mt-2 h-10 w-full rounded-md border border-zinc-300 px-3 outline-none focus:border-zinc-950 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-zinc-300"
-              />
-            </label>
-
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setCenterTextModalOpen(false);
-                  setCenterTextDraft("");
-                }}
-                className="button-secondary"
-              >
-                취소
-              </button>
-              <button
-                type="button"
-                onClick={addCenterTextRow}
-                className="button-primary"
-                disabled={!centerTextDraft.trim()}
-              >
-                추가
-              </button>
-            </div>
+          <div className="mt-5 flex justify-end gap-2">
+            <button type="button" onClick={closeCenterTextModal} className="button-secondary">
+              취소
+            </button>
+            <button type="button" onClick={addCenterTextRow} className="button-primary" disabled={!centerTextDraft.trim()}>
+              추가
+            </button>
           </div>
-        </div>
+        </Dialog>
+      ) : null}
+
+      {pendingCsvRows ? (
+        <Dialog title={UI.csvConfirmTitle} description={UI.csvConfirmDescription} onClose={closeCsvConfirm}>
+          <p className="text-sm text-zinc-700 dark:text-zinc-300">
+            현재 <strong>{store.items.length}개</strong> 항목이 <strong>{pendingCsvRows.length}개</strong> CSV 항목으로
+            바뀝니다. 계속할까요?
+          </p>
+          <div className="mt-5 flex justify-end gap-2">
+            <button type="button" onClick={closeCsvConfirm} className="button-secondary" data-autofocus>
+              {UI.csvConfirmCancel}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                applyCsvRows(pendingCsvRows);
+                setPendingCsvRows(null);
+              }}
+              className="button-primary"
+            >
+              {UI.csvConfirmApply}
+            </button>
+          </div>
+        </Dialog>
       ) : null}
     </main>
   );

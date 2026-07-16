@@ -55,10 +55,10 @@ export function ReactionTable({
   };
 
   return (
-    <div className="overflow-x-auto border-y border-zinc-200">
+    <div className="overflow-x-auto border-y border-zinc-200 dark:border-zinc-800">
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <table className="w-full min-w-[1380px] border-collapse text-left text-sm">
-          <thead className="bg-zinc-100 text-xs font-bold uppercase text-zinc-600">
+          <thead className="bg-zinc-100 text-xs font-bold uppercase text-zinc-600 dark:bg-zinc-900 dark:text-zinc-400">
             <tr>
               <Th className="w-12 text-center">Drag</Th>
               <Th className="w-16 text-center">No.</Th>
@@ -98,7 +98,7 @@ export function ReactionTable({
       </DndContext>
 
       {items.length === 0 ? (
-        <div className="grid min-h-40 place-items-center bg-white text-sm text-zinc-500">
+        <div className="grid min-h-40 place-items-center bg-white text-sm text-zinc-500 dark:bg-zinc-950 dark:text-zinc-400">
           행을 추가해서 리액션 메뉴판을 만들어보세요.
         </div>
       ) : null}
@@ -142,7 +142,7 @@ function ReactionRow({
       ref={setNodeRef}
       style={style}
       className={[
-        "border-t border-zinc-200 bg-white align-middle",
+        "border-t border-zinc-200 bg-white align-middle dark:border-zinc-800 dark:bg-zinc-950",
         isDragging ? "relative z-20 shadow-lg" : "",
       ].join(" ")}
     >
@@ -150,14 +150,14 @@ function ReactionRow({
         <button
           type="button"
           aria-label="행 이동"
-          className="cursor-grab rounded-md px-2 py-1 text-lg text-zinc-500 active:cursor-grabbing"
+          className="cursor-grab rounded-md px-2 py-1 text-lg text-zinc-500 active:cursor-grabbing dark:text-zinc-400"
           {...attributes}
           {...listeners}
         >
           ⠿
         </button>
       </Td>
-      <Td className="text-center font-mono text-zinc-500">{index + 1}</Td>
+      <Td className="text-center font-mono text-zinc-500 dark:text-zinc-400">{index + 1}</Td>
       <Td className="text-center">
         <input
           aria-label={`행 ${index + 1} 선택`}
@@ -179,13 +179,13 @@ function ReactionRow({
               count: event.target.value === "" ? null : Number(event.target.value),
             })
           }
-          className="h-9 w-28 rounded-md border border-zinc-300 px-2 font-mono outline-none focus:border-zinc-950 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-400"
+          className="h-9 w-28 rounded-md border border-zinc-300 bg-white px-2 font-mono outline-none focus:border-zinc-950 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-white dark:disabled:bg-zinc-800 dark:disabled:text-zinc-500"
         />
       </Td>
       <Td>
         <div className="space-y-2">
           {isCenterTextRow ? (
-            <span className="inline-flex rounded-md bg-zinc-100 px-2 py-1 text-[11px] font-bold text-zinc-600">
+            <span className="inline-flex rounded-md bg-zinc-100 px-2 py-1 text-[11px] font-bold text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
               CENTER TEXT
             </span>
           ) : null}
@@ -193,7 +193,7 @@ function ReactionRow({
             value={item.text}
             onChange={(event) => onUpdateItem(item.id, { text: event.target.value })}
             placeholder={isCenterTextRow ? "가운데 문구를 입력하세요" : "리액션 텍스트"}
-            className="h-9 w-full min-w-48 rounded-md border border-zinc-300 px-3 outline-none focus:border-zinc-950"
+            className="h-9 w-full min-w-48 rounded-md border border-zinc-300 bg-white px-3 outline-none focus:border-zinc-950 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-white"
           />
         </div>
       </Td>
@@ -205,12 +205,12 @@ function ReactionRow({
           className={[
             "inline-flex min-w-44 items-center justify-between gap-3 rounded-md border px-3 py-2 text-left transition",
             isCenterTextRow
-              ? "cursor-not-allowed border-zinc-200 bg-zinc-50 text-zinc-400"
+              ? "cursor-not-allowed border-zinc-200 bg-zinc-50 text-zinc-400 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-600"
               : isBadgePanelOpen
-                ? "border-zinc-950 bg-zinc-950 text-white"
+                ? "border-zinc-950 bg-zinc-950 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-950"
                 : item.badges.length > 0
-                  ? "border-zinc-950 bg-zinc-100 text-zinc-950 hover:bg-zinc-200"
-                  : "border-zinc-300 bg-white text-zinc-900 hover:border-zinc-950",
+                  ? "border-zinc-950 bg-zinc-100 text-zinc-950 hover:bg-zinc-200 dark:border-zinc-300 dark:bg-zinc-800 dark:text-zinc-50 dark:hover:bg-zinc-700"
+                  : "border-zinc-300 bg-white text-zinc-900 hover:border-zinc-950 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:hover:border-zinc-300",
           ].join(" ")}
         >
           <span className="flex items-center gap-2">
@@ -218,10 +218,10 @@ function ReactionRow({
               className={[
                 "inline-flex h-6 w-6 items-center justify-center rounded-md text-xs font-black",
                 isCenterTextRow
-                  ? "bg-zinc-200 text-zinc-500"
+                  ? "bg-zinc-200 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-500"
                   : item.badges.length > 0
-                    ? "bg-zinc-950 text-white"
-                    : "bg-zinc-100 text-zinc-700",
+                    ? "bg-zinc-950 text-white dark:bg-zinc-100 dark:text-zinc-950"
+                    : "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
               ].join(" ")}
             >
               B
@@ -242,7 +242,7 @@ function ReactionRow({
       </Td>
       <Td>
         {isCenterTextRow ? (
-          <span className="text-xs font-medium text-zinc-400">Not used</span>
+          <span className="text-xs font-medium text-zinc-400 dark:text-zinc-500">Not used</span>
         ) : (
           <ColorInput
             label="Count color"
@@ -263,9 +263,17 @@ function ReactionRow({
 }
 
 function Th({ className = "", children }: { className?: string; children: ReactNode }) {
-  return <th className={`border-r border-zinc-200 px-3 py-3 last:border-r-0 ${className}`}>{children}</th>;
+  return (
+    <th className={`border-r border-zinc-200 px-3 py-3 last:border-r-0 dark:border-zinc-800 ${className}`}>
+      {children}
+    </th>
+  );
 }
 
 function Td({ className = "", children }: { className?: string; children: ReactNode }) {
-  return <td className={`border-r border-zinc-100 px-3 py-3 last:border-r-0 ${className}`}>{children}</td>;
+  return (
+    <td className={`border-r border-zinc-100 px-3 py-3 last:border-r-0 dark:border-zinc-900 ${className}`}>
+      {children}
+    </td>
+  );
 }
