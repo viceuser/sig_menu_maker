@@ -23,6 +23,8 @@ import { ColorInput } from "./ColorInput";
 
 interface ReactionTableProps {
   items: ReactionItem[];
+  itemNumberById?: ReadonlyMap<string, number>;
+  emptyMessage?: string;
   selectedIds: Set<string>;
   allSelected: boolean;
   activeBadgeItemId?: string | null;
@@ -35,6 +37,8 @@ interface ReactionTableProps {
 
 export function ReactionTable({
   items,
+  itemNumberById,
+  emptyMessage = "행을 추가해서 리액션 메뉴판을 만들어보세요.",
   selectedIds,
   allSelected,
   activeBadgeItemId,
@@ -91,11 +95,11 @@ export function ReactionTable({
   }, [items.length]);
 
   return (
-    <div className="border-y border-zinc-200 dark:border-zinc-800">
+    <div data-reaction-history-scope className="border-y border-zinc-200 dark:border-zinc-800">
       <div
         ref={topScrollRef}
         aria-label="Horizontal table scroll"
-        className="sticky top-[65px] z-30 h-4 overflow-x-auto overflow-y-hidden border-b border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950"
+        className="h-4 overflow-x-auto overflow-y-hidden border-b border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950"
       >
         <div className="h-px" style={{ width: tableScrollWidth }} />
       </div>
@@ -128,7 +132,7 @@ export function ReactionTable({
                 <ReactionRow
                   key={item.id}
                   item={item}
-                  index={index}
+                  number={itemNumberById?.get(item.id) ?? index + 1}
                   selected={selectedIds.has(item.id)}
                   isBadgePanelOpen={activeBadgeItemId === item.id}
                   onToggleSelected={onToggleSelected}
@@ -143,7 +147,7 @@ export function ReactionTable({
 
       {items.length === 0 ? (
         <div className="grid min-h-40 place-items-center bg-white text-sm text-zinc-500 dark:bg-zinc-950 dark:text-zinc-400">
-          행을 추가해서 리액션 메뉴판을 만들어보세요.
+          {emptyMessage}
         </div>
         ) : null}
       </div>
@@ -153,7 +157,7 @@ export function ReactionTable({
 
 function ReactionRow({
   item,
-  index,
+  number,
   selected,
   isBadgePanelOpen,
   onToggleSelected,
@@ -161,7 +165,7 @@ function ReactionRow({
   onOpenBadgePanel,
 }: {
   item: ReactionItem;
-  index: number;
+  number: number;
   selected: boolean;
   isBadgePanelOpen: boolean;
   onToggleSelected: (id: string) => void;
@@ -202,10 +206,10 @@ function ReactionRow({
           ⠿
         </button>
       </Td>
-      <Td className="text-center font-mono text-zinc-500 dark:text-zinc-400">{index + 1}</Td>
+      <Td className="text-center font-mono text-zinc-500 dark:text-zinc-400">{number}</Td>
       <Td className="text-center">
         <input
-          aria-label={`행 ${index + 1} 선택`}
+          aria-label={`행 ${number} 선택`}
           type="checkbox"
           checked={selected}
           onChange={() => onToggleSelected(item.id)}

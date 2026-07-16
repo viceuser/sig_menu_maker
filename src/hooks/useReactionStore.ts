@@ -23,11 +23,23 @@ import {
   type ReactionItem,
   type TextEffect,
 } from "@/lib/types";
-import { loadMenuConfig, saveItems, saveMenuConfig } from "@/lib/storage";
+import { loadMenuConfig, saveMenuConfig } from "@/lib/storage";
 
 export type SaveState = "saving" | "saved";
 
 const AUTOSAVE_DEBOUNCE_MS = 600;
+const HISTORY_LIMIT = 80;
+
+type ItemsUpdater = ReactionItem[] | ((items: ReactionItem[]) => ReactionItem[]);
+
+function cloneReactionItem(item: ReactionItem): ReactionItem {
+  return {
+    ...item,
+    countColor: { ...item.countColor },
+    textColor: { ...item.textColor },
+    badges: item.badges.map((badge) => ({ ...badge, fill: { ...badge.fill } })),
+  };
+}
 
 export function createReactionItem(): ReactionItem {
   return {
@@ -59,6 +71,9 @@ function createSamples(): ReactionItem[] {
 
 export function useReactionStore() {
   const [items, setItems] = useState<ReactionItem[]>([]);
+  const itemsRef = useRef<ReactionItem[]>([]);
+  const historyRef = useRef<{ past: ReactionItem[][]; future: ReactionItem[][] }>({ past: [], future: [] });
+  const [historyState, setHistoryState] = useState({ canUndo: false, canRedo: false });
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [itemsPerPage, setItemsPerPage] = useState(DEFAULT_ITEMS_PER_PAGE);
   const [fadeInterval, setFadeInterval] = useState(DEFAULT_FADE_INTERVAL);
@@ -76,11 +91,48 @@ export function useReactionStore() {
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const skipNextAutosaveRef = useRef(true);
 
+  const updateHistoryState = useCallback(() => {
+    setHistoryState({
+      canUndo: historyRef.current.past.length > 0,
+      canRedo: historyRef.current.future.length > 0,
+    });
+  }, []);
+
+  const replaceItemsState = useCallback(
+    (nextItems: ReactionItem[], recordHistory = true) => {
+      const previous = itemsRef.current;
+      if (nextItems === previous) return;
+
+      if (recordHistory) {
+        historyRef.current.past = [...historyRef.current.past, previous].slice(-HISTORY_LIMIT);
+        historyRef.current.future = [];
+      }
+
+      itemsRef.current = nextItems;
+      setItems(nextItems);
+      updateHistoryState();
+    },
+    [updateHistoryState],
+  );
+
+  const commitItems = useCallback(
+    (updater: ItemsUpdater) => {
+      const previous = itemsRef.current;
+      const nextItems = typeof updater === "function" ? updater(previous) : updater;
+      if (nextItems === previous) return;
+      replaceItemsState(nextItems, true);
+    },
+    [replaceItemsState],
+  );
+
   const reload = useCallback(() => {
     const config = loadMenuConfig();
     const loadedItems = config.items.length ? config.items : createSamples();
 
+    historyRef.current = { past: [], future: [] };
+    itemsRef.current = loadedItems;
     setItems(loadedItems);
+    updateHistoryState();
     setItemsPerPage(config.itemsPerPage || DEFAULT_ITEMS_PER_PAGE);
     setFadeInterval(config.fadeInterval || DEFAULT_FADE_INTERVAL);
     setFontPreset(isFontPresetId(config.fontPreset) ? config.fontPreset : DEFAULT_FONT_PRESET);
@@ -96,7 +148,7 @@ export function useReactionStore() {
     setSelectedIds(new Set());
     skipNextAutosaveRef.current = true;
     setIsLoaded(true);
-  }, []);
+  }, [updateHistoryState]);
 
   useEffect(() => {
     // The store hydrates from localStorage after the client mounts.
@@ -154,7 +206,7 @@ export function useReactionStore() {
 
   const insertItemNearSelection = useCallback(
     (nextItem: ReactionItem) => {
-      setItems((prev) => {
+      commitItems((prev) => {
         if (selectedIds.size === 0) {
           return [...prev, nextItem];
         }
@@ -177,7 +229,7 @@ export function useReactionStore() {
 
       setSelectedIds(new Set([nextItem.id]));
     },
-    [selectedIds],
+    [commitItems, selectedIds],
   );
 
   const addItem = useCallback(() => {
@@ -192,40 +244,55 @@ export function useReactionStore() {
   );
 
   const updateItem = useCallback((id: string, patch: Partial<ReactionItem>) => {
-    setItems((prev) => prev.map((item) => (item.id === id ? { ...item, ...patch } : item)));
-  }, []);
+    commitItems((prev) => prev.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+  }, [commitItems]);
 
   const applyToSelected = useCallback(
     (patch: Partial<ReactionItem>) => {
       if (selectedIds.size === 0) return;
-      setItems((prev) => prev.map((item) => (selectedIds.has(item.id) ? { ...item, ...patch } : item)));
+      commitItems((prev) => prev.map((item) => (selectedIds.has(item.id) ? { ...item, ...patch } : item)));
     },
-    [selectedIds],
+    [commitItems, selectedIds],
   );
 
   const applyToAll = useCallback((patch: Partial<ReactionItem>) => {
-    setItems((prev) => prev.map((item) => ({ ...item, ...patch })));
-  }, []);
+    commitItems((prev) => prev.map((item) => ({ ...item, ...patch })));
+  }, [commitItems]);
 
   const deleteSelected = useCallback(() => {
-    setItems((prev) => prev.filter((item) => !selectedIds.has(item.id)));
+    commitItems((prev) => prev.filter((item) => !selectedIds.has(item.id)));
     setSelectedIds(new Set());
-  }, [selectedIds]);
+  }, [commitItems, selectedIds]);
 
   const replaceItems = useCallback((nextItems: ReactionItem[]) => {
-    setItems(nextItems);
+    commitItems(nextItems);
     setSelectedIds(new Set());
-    saveItems(nextItems);
-  }, []);
+  }, [commitItems]);
 
   const appendItems = useCallback((nextItems: ReactionItem[]) => {
-    setItems((prev) => {
-      const merged = [...prev, ...nextItems];
-      saveItems(merged);
-      return merged;
-    });
+    commitItems((prev) => [...prev, ...nextItems]);
     setSelectedIds(new Set());
-  }, []);
+  }, [commitItems]);
+
+  const duplicateSelected = useCallback(() => {
+    if (selectedIds.size === 0) return 0;
+
+    const duplicatedIds: string[] = [];
+    const nextItems: ReactionItem[] = [];
+
+    itemsRef.current.forEach((item) => {
+      nextItems.push(item);
+      if (!selectedIds.has(item.id)) return;
+
+      const duplicate = { ...cloneReactionItem(item), id: uuidv4() };
+      duplicatedIds.push(duplicate.id);
+      nextItems.push(duplicate);
+    });
+
+    commitItems(nextItems);
+    setSelectedIds(new Set(duplicatedIds));
+    return duplicatedIds.length;
+  }, [commitItems, selectedIds]);
 
   const toggleSelected = useCallback((id: string) => {
     setSelectedIds((prev) => {
@@ -243,14 +310,52 @@ export function useReactionStore() {
     });
   }, [items]);
 
+  const toggleSelectedIds = useCallback((ids: string[]) => {
+    if (ids.length === 0) return;
+
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      const shouldClear = ids.every((id) => next.has(id));
+      ids.forEach((id) => {
+        if (shouldClear) next.delete(id);
+        else next.add(id);
+      });
+      return next;
+    });
+  }, []);
+
   const moveItem = useCallback((activeId: string, overId: string) => {
-    setItems((prev) => {
+    commitItems((prev) => {
       const oldIndex = prev.findIndex((item) => item.id === activeId);
       const newIndex = prev.findIndex((item) => item.id === overId);
       if (oldIndex < 0 || newIndex < 0) return prev;
       return arrayMove(prev, oldIndex, newIndex);
     });
-  }, []);
+  }, [commitItems]);
+
+  const undo = useCallback(() => {
+    const previous = historyRef.current.past.at(-1);
+    if (!previous) return;
+
+    historyRef.current.past = historyRef.current.past.slice(0, -1);
+    historyRef.current.future = [itemsRef.current, ...historyRef.current.future].slice(0, HISTORY_LIMIT);
+    itemsRef.current = previous;
+    setItems(previous);
+    setSelectedIds((selected) => new Set([...selected].filter((id) => previous.some((item) => item.id === id))));
+    updateHistoryState();
+  }, [updateHistoryState]);
+
+  const redo = useCallback(() => {
+    const next = historyRef.current.future[0];
+    if (!next) return;
+
+    historyRef.current.future = historyRef.current.future.slice(1);
+    historyRef.current.past = [...historyRef.current.past, itemsRef.current].slice(-HISTORY_LIMIT);
+    itemsRef.current = next;
+    setItems(next);
+    setSelectedIds((selected) => new Set([...selected].filter((id) => next.some((item) => item.id === id))));
+    updateHistoryState();
+  }, [updateHistoryState]);
 
   const saveAll = useCallback(() => {
     saveMenuConfig({
@@ -304,6 +409,8 @@ export function useReactionStore() {
       verticalPadding,
       isLoaded,
       saveState,
+      canUndo: historyState.canUndo,
+      canRedo: historyState.canRedo,
       selectedCount: selectedIds.size,
       allSelected,
       setItemsPerPage,
@@ -324,11 +431,15 @@ export function useReactionStore() {
       applyToSelected,
       applyToAll,
       deleteSelected,
+      duplicateSelected,
       replaceItems,
       appendItems,
       toggleSelected,
       toggleAll,
+      toggleSelectedIds,
       moveItem,
+      undo,
+      redo,
       saveAll,
       reload,
     }),
@@ -341,6 +452,7 @@ export function useReactionStore() {
       appendItems,
       contentAlign,
       deleteSelected,
+      duplicateSelected,
       fadeInterval,
       fontPreset,
       fontSize,
@@ -350,6 +462,8 @@ export function useReactionStore() {
       isLoaded,
       items,
       itemsPerPage,
+      historyState.canRedo,
+      historyState.canUndo,
       moveItem,
       reload,
       replaceItems,
@@ -360,9 +474,12 @@ export function useReactionStore() {
       strokeWidth,
       textEffect,
       toggleAll,
+      toggleSelectedIds,
       toggleSelected,
+      undo,
       updateItem,
       verticalPadding,
+      redo,
     ],
   );
 }

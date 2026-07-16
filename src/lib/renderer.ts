@@ -8,7 +8,7 @@ const FULL_MENU_COLUMN_GAP = 16;
 
 const COUNT_SLOT_SIDE_PADDING = 6;
 const MIN_COUNT_DIGITS = "00000";
-interface RenderOptions {
+export interface RenderOptions {
   itemsPerPage: number;
   fadeIntervalMs?: number;
   fontPreset: FontPresetId;

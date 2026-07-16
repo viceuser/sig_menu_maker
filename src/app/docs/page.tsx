@@ -24,6 +24,7 @@ const NAV_BASE: { id: string; label: string; numbered: boolean }[] = [
   { id: "bulk", label: "일괄 적용", numbered: true },
   { id: "csv", label: "CSV 업로드 / 다운로드", numbered: true },
   { id: "preview", label: "미리보기와 저장", numbered: true },
+  { id: "obs", label: "OBS 오버레이", numbered: true },
   { id: "storage", label: "저장 방식", numbered: true },
   { id: "faq", label: "자주 묻는 질문", numbered: true },
 ];
@@ -335,7 +336,7 @@ export default function DocsPage() {
 
             <Section
               id="table"
-              lead="실제 리액션 항목을 넣고 다듬는 작업 영역입니다."
+              lead="실제 리액션 항목을 넣고 다듬는 작업 영역입니다. 상단 작업 도구는 목록을 내려도 화면에 고정됩니다."
             >
               <div className="grid gap-3 sm:grid-cols-2">
                 <KeyValue label="+ 추가">빈 행을 추가합니다. 행을 선택한 상태라면 그 아래에 추가됩니다.</KeyValue>
@@ -343,7 +344,12 @@ export default function DocsPage() {
                   count와 text 영역을 함께 차지하는 가운데 정렬 문구 행을 추가합니다. 구분선이나 안내 문구에 좋습니다.
                 </KeyValue>
                 <KeyValue label="삭제">체크한 행만 지웁니다.</KeyValue>
+                <KeyValue label="선택 복제">체크한 행의 텍스트, 색상, 배지를 그대로 복제해 바로 아래에 추가합니다.</KeyValue>
                 <KeyValue label="드래그">왼쪽 핸들로 순서를 바꿀 수 있습니다.</KeyValue>
+                <KeyValue label="검색">개수, 리액션 텍스트, 배지 이름으로 원하는 행만 빠르게 찾습니다.</KeyValue>
+                <KeyValue label="실행 취소 / 다시 실행">
+                  삭제, 복제, CSV 교체, 일괄 적용, 순서 변경을 버튼이나 Ctrl+Z / Ctrl+Shift+Z로 되돌립니다.
+                </KeyValue>
               </div>
               <Callout tone="tip" title="텍스트 전용 줄">
                 count를 비우고 text만 넣으면 소제목이나 안내 문구처럼 사용할 수 있습니다. 완전한 가운데 정렬이 필요하면{" "}
@@ -408,7 +414,7 @@ export default function DocsPage() {
 
             <Section
               id="bulk"
-              lead="여러 줄에 같은 스타일을 빠르게 넣을 때 쓰는 기능입니다."
+              lead="상단 고정 작업 도구에서 일괄 적용을 펼치면 여러 줄에 같은 스타일을 빠르게 넣을 수 있습니다."
             >
               <ul className="list-disc space-y-2 pl-5">
                 <li>
@@ -429,7 +435,7 @@ export default function DocsPage() {
 
             <Section
               id="csv"
-              lead="엑셀이나 메모장으로 목록을 관리할 때 가장 편한 방식입니다."
+              lead="화면 상단에서 CSV 형식으로 전체 목록을 한 번에 업로드하거나 내려받을 수 있습니다."
             >
               <div className="overflow-hidden rounded-md border border-zinc-800 bg-zinc-950">
                 <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-2">
@@ -440,6 +446,10 @@ export default function DocsPage() {
               </div>
 
               <ul className="list-disc space-y-2 pl-5">
+                <li>
+                  CSV 버튼은 테이블 위 행 도구에 있으며, <strong>CSV 형식과 예시 보기</strong>를 펼치면 입력 형식을 바로
+                  확인할 수 있습니다.
+                </li>
                 <li>
                   <strong>CSV 업로드</strong>는 현재 목록을 지우고 CSV 내용으로 전체 교체합니다. 기존 목록이 있으면 교체
                   전에 확인 창이 뜹니다.
@@ -474,13 +484,31 @@ export default function DocsPage() {
               id="preview"
               lead="실시간 미리보기로 보면서 다듬고, 최종 저장은 새 창 미리보기에서 합니다."
             >
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid gap-3 sm:grid-cols-2">
                 <KeyValue label="실시간 미리보기">편집 화면 오른쪽에 항상 표시되는 미리보기입니다. 변경 즉시 갱신됩니다.</KeyValue>
+                <KeyValue label="100% / 150% / 200%">작은 그라데이션, 외곽선, 글자 효과를 확대해서 확인합니다.</KeyValue>
+                <KeyValue label="배경 테스트">투명 격자, 검정, 흰색 배경에서 실제 가독성을 비교합니다.</KeyValue>
                 <KeyValue label="새 창 미리보기">현재 설정 기준으로 페이지 슬라이드쇼를 보여줍니다.</KeyValue>
                 <KeyValue label="GIF / PNG 저장">새 창 미리보기 하단 버튼에서 투명 배경 GIF 또는 컬럼형 PNG를 저장합니다.</KeyValue>
               </div>
               <Callout tone="tip">
                 실시간 미리보기는 편집용, 새 창 미리보기는 검수·저장용입니다.
+              </Callout>
+            </Section>
+
+            <Section
+              id="obs"
+              lead="현재 메뉴를 투명한 웹 오버레이로 만들어 OBS 브라우저 소스에 넣을 수 있습니다."
+            >
+              <ol className="list-decimal space-y-2 pl-5">
+                <li>오른쪽 미리보기 아래에서 <strong>OBS 오버레이 링크 복사</strong>를 누릅니다.</li>
+                <li>OBS의 소스 추가에서 <strong>브라우저</strong>를 선택합니다.</li>
+                <li>복사한 주소를 URL에 붙여 넣고 원하는 너비와 높이를 설정합니다.</li>
+                <li>배경은 투명하게 유지되며, 여러 페이지는 설정한 전환 간격에 따라 반복됩니다.</li>
+              </ol>
+              <Callout tone="warn" title="메뉴를 수정했을 때">
+                오버레이 데이터는 복사한 주소 안에 들어 있습니다. 항목이나 출력 설정을 바꾼 뒤에는 링크를 다시 복사해 OBS
+                브라우저 소스의 URL을 교체해 주세요.
               </Callout>
             </Section>
 
@@ -522,6 +550,9 @@ export default function DocsPage() {
                 </FaqItem>
                 <FaqItem q="GIF와 PNG는 언제 생성되나요?">
                   새 창 미리보기 안에서 저장 버튼을 눌렀을 때 생성됩니다.
+                </FaqItem>
+                <FaqItem q="OBS 오버레이가 수정 전 상태로 보여요.">
+                  메뉴 수정 후 OBS 오버레이 링크를 다시 복사하고, OBS 브라우저 소스의 URL을 새 주소로 교체해 주세요.
                 </FaqItem>
               </div>
             </Section>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties } from "react";
 import { BadgeEditor } from "@/components/BadgeEditor";
 import { BadgeFloatingPanel } from "@/components/BadgeFloatingPanel";
 import { ColorInput } from "@/components/ColorInput";
@@ -20,6 +20,7 @@ import {
 } from "@/lib/csv";
 import { FONT_PRESETS } from "@/lib/fonts";
 import { SUPPORT_URL } from "@/lib/links";
+import { encodeOverlayConfig } from "@/lib/overlay";
 import { renderFullMenuPng, renderReactionDataUrls } from "@/lib/renderer";
 import { savePreviewData } from "@/lib/storage";
 import {
@@ -58,6 +59,7 @@ const UI = {
   rowHeight: "행 높이",
   openPreview: "새 창 미리보기 · GIF/PNG 저장",
   previewDock: "실시간 미리보기",
+  obsOverlay: "OBS 오버레이 링크 복사",
   collapse: "접기",
   expand: "펼치기",
   outputSettings: "출력 설정",
@@ -68,6 +70,7 @@ const UI = {
   verticalPadding: "상하 여백",
   csvTitle: "CSV 업로드 / 다운로드",
   csvHint: "count,text 두 컬럼만 있으면 됩니다.",
+  csvTopHint: "(CSV 형식으로 한번에 업로드 가능)",
   csvUpload: "CSV 업로드",
   csvDownloadCurrent: "현재 목록 CSV 다운로드",
   csvExampleDownload: "예시 CSV 다운로드",
@@ -91,6 +94,11 @@ const UI = {
   add: "+ 추가",
   addCenterText: "가운데 문구 추가",
   remove: "삭제",
+  duplicate: "선택 복제",
+  undo: "실행 취소",
+  redo: "다시 실행",
+  search: "리액션 검색",
+  noSearchResults: "검색 결과가 없습니다.",
   selected: "선택",
   total: "전체",
   bulkCountLabel: "일괄 개수 색상",
@@ -121,6 +129,23 @@ function downloadBlob(blob: Blob, filename: string) {
   anchor.download = filename;
   anchor.click();
   URL.revokeObjectURL(url);
+}
+
+async function copyText(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    const input = document.createElement("textarea");
+    input.value = text;
+    input.style.position = "fixed";
+    input.style.opacity = "0";
+    document.body.appendChild(input);
+    input.select();
+    const copied = document.execCommand("copy");
+    input.remove();
+    return copied;
+  }
 }
 
 function HomeIcon() {
@@ -202,19 +227,45 @@ type ToastState = {
 
 export default function Home() {
   const store = useReactionStore();
+  const { canRedo, canUndo, redo, undo } = store;
+  const headerRef = useRef<HTMLElement>(null);
+  const toolbarRef = useRef<HTMLElement>(null);
+  const [headerHeight, setHeaderHeight] = useState(64);
+  const [toolbarHeight, setToolbarHeight] = useState(0);
   const [toast, setToast] = useState<ToastState | null>(null);
   const [bulkCountColor, setBulkCountColor] = useState<TextPaint>(DEFAULT_COUNT_COLOR);
   const [bulkTextColor, setBulkTextColor] = useState<TextPaint>(DEFAULT_TEXT_COLOR);
   const [bulkBadges, setBulkBadges] = useState<BadgeConfig[]>([]);
+  const [bulkApplyOpen, setBulkApplyOpen] = useState(false);
   const [activeBadgeItemId, setActiveBadgeItemId] = useState<string | null>(null);
   const [previewDockOpen, setPreviewDockOpen] = useState(() => loadPreviewDockOpen());
   const [centerTextModalOpen, setCenterTextModalOpen] = useState(false);
   const [centerTextDraft, setCenterTextDraft] = useState("");
   const [pendingCsvRows, setPendingCsvRows] = useState<ParsedReactionCsvRow[] | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isCopyingObsLink, setIsCopyingObsLink] = useState(false);
+  const [obsOverlayUrl, setObsOverlayUrl] = useState<string | null>(null);
 
   useEffect(() => {
     savePreviewDockOpen(previewDockOpen);
   }, [previewDockOpen]);
+
+  useEffect(() => {
+    const header = headerRef.current;
+    const toolbar = toolbarRef.current;
+    if (!header || !toolbar) return;
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      entries.forEach((entry) => {
+        const height = Math.ceil(entry.target.getBoundingClientRect().height);
+        if (entry.target === header) setHeaderHeight(height);
+        if (entry.target === toolbar) setToolbarHeight(height);
+      });
+    });
+    resizeObserver.observe(header);
+    resizeObserver.observe(toolbar);
+    return () => resizeObserver.disconnect();
+  }, [store.isLoaded]);
 
   useEffect(() => {
     if (!toast) return;
@@ -232,6 +283,25 @@ export default function Home() {
   );
 
   const csvExample = useMemo(() => createReactionCsvExample(), []);
+
+  const itemNumberById = useMemo(
+    () => new Map(store.items.map((item, index) => [item.id, index + 1])),
+    [store.items],
+  );
+
+  const filteredItems = useMemo(() => {
+    const query = searchQuery.trim().toLocaleLowerCase("ko");
+    if (!query) return store.items;
+
+    return store.items.filter((item) => {
+      const badgeText = item.badges.map((badge) => `${badge.icon} ${badge.label}`).join(" ");
+      return `${item.count ?? ""} ${item.text} ${badgeText}`.toLocaleLowerCase("ko").includes(query);
+    });
+  }, [searchQuery, store.items]);
+
+  const filteredItemIds = useMemo(() => filteredItems.map((item) => item.id), [filteredItems]);
+  const allFilteredSelected =
+    filteredItems.length > 0 && filteredItems.every((item) => store.selectedIds.has(item.id));
 
   const renderOptions = useMemo(
     () =>
@@ -267,6 +337,36 @@ export default function Home() {
     setToast({ id: Date.now(), message });
   }, []);
 
+  useEffect(() => {
+    const handleHistoryShortcut = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey)) return;
+
+      const key = event.key.toLowerCase();
+      if (key !== "z" && key !== "y") return;
+
+      const target = event.target as HTMLElement | null;
+      const isEditable = target?.matches("input, textarea, [contenteditable='true']") ?? false;
+      if (isEditable && !target?.closest("[data-reaction-history-scope]")) return;
+
+      const shouldRedo = key === "y" || (key === "z" && event.shiftKey);
+      if (shouldRedo) {
+        if (!canRedo) return;
+        event.preventDefault();
+        redo();
+        showNotice("다시 실행했습니다.");
+        return;
+      }
+
+      if (!canUndo) return;
+      event.preventDefault();
+      undo();
+      showNotice("실행을 취소했습니다.");
+    };
+
+    window.addEventListener("keydown", handleHistoryShortcut);
+    return () => window.removeEventListener("keydown", handleHistoryShortcut);
+  }, [canRedo, canUndo, redo, showNotice, undo]);
+
   const applyPatchByScope = (patch: Partial<ReactionItem>, doneMessage: string) => {
     if (store.selectedCount > 0) {
       store.applyToSelected(patch);
@@ -299,6 +399,35 @@ export default function Home() {
     });
     window.open("/preview", "reaction-preview", "width=920,height=760");
     showNotice(UI.previewOpened);
+  };
+
+  const copyObsOverlayLink = async () => {
+    try {
+      setIsCopyingObsLink(true);
+      const token = await encodeOverlayConfig({
+        items: store.items,
+        itemsPerPage: store.itemsPerPage,
+        fadeInterval: store.fadeInterval,
+        fontPreset: store.fontPreset,
+        fontSize: store.fontSize,
+        contentAlign: store.contentAlign,
+        strokeWidth: store.strokeWidth,
+        textEffect: store.textEffect,
+        gapMin: store.gapMin,
+        gapBase: store.gapBase,
+        gapMax: store.gapMax,
+        rowHeight: store.rowHeight,
+        verticalPadding: store.verticalPadding,
+      });
+      const url = `${window.location.origin}/overlay#${token}`;
+      const copied = await copyText(url);
+      setObsOverlayUrl(url);
+      showNotice(copied ? "OBS 오버레이 링크를 복사했습니다." : "OBS 오버레이 링크를 생성했습니다.");
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : "OBS 오버레이 링크를 만들지 못했습니다.");
+    } finally {
+      setIsCopyingObsLink(false);
+    }
   };
 
   const applyBulkCountColor = () => applyPatchByScope({ countColor: clonePaint(bulkCountColor) }, UI.countColorDone);
@@ -398,7 +527,10 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-zinc-50 text-zinc-950 dark:bg-zinc-950 dark:text-zinc-100">
-      <header className="sticky top-0 z-40 border-b border-zinc-200 bg-zinc-50/92 backdrop-blur supports-[backdrop-filter]:bg-opacity-80 dark:border-zinc-800 dark:bg-zinc-950/92">
+      <header
+        ref={headerRef}
+        className="sticky top-0 z-40 border-b border-zinc-200 bg-zinc-50/92 backdrop-blur supports-[backdrop-filter]:bg-opacity-80 dark:border-zinc-800 dark:bg-zinc-950/92"
+      >
         <div className="mx-auto flex w-full max-w-[1700px] flex-wrap items-center gap-x-4 gap-y-2 px-5 py-3">
           <div className="min-w-0">
             <p className="text-[11px] font-bold uppercase tracking-wide text-accent">Reaction Menu Maker</p>
@@ -428,182 +560,258 @@ export default function Home() {
       </header>
 
       <div className="mx-auto w-full max-w-[1700px] px-5 py-6">
-        <p className={`mb-5 max-w-3xl text-sm leading-6 ${MUTED_CLASS}`}>
+        <section
+              ref={toolbarRef}
+              data-scroll-region="toolbar"
+              className={`fixed left-5 right-5 z-30 mx-auto max-w-[1660px] space-y-3 overflow-y-auto rounded-md border p-3 shadow-lg ${bulkApplyOpen ? "overscroll-contain" : "overscroll-auto"} ${SURFACE_CLASS}`}
+              style={{ top: headerHeight + 8, maxHeight: `calc(100vh - ${headerHeight + 16}px)` }}
+            >
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 [&>button]:shrink-0 [&>button]:whitespace-nowrap">
+                <button type="button" onClick={store.addItem} className="button-primary h-9 px-3 text-xs">
+                  {UI.add}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCenterTextModalOpen(true)}
+                  className="button-secondary h-9 px-3 text-xs"
+                >
+                  {UI.addCenterText}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const count = store.duplicateSelected();
+                    if (count > 0) showNotice(`${count}개 행을 복제했습니다.`);
+                  }}
+                  disabled={store.selectedCount === 0}
+                  className="button-secondary h-9 px-3 text-xs"
+                >
+                  {UI.duplicate}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    store.deleteSelected();
+                    showNotice(UI.deleted);
+                  }}
+                  disabled={store.selectedCount === 0}
+                  className="button-secondary h-9 px-3 text-xs"
+                >
+                  {UI.remove}
+                </button>
+                <span className="mx-1 hidden h-6 w-px shrink-0 bg-zinc-200 sm:block dark:bg-zinc-700" aria-hidden="true" />
+                <button
+                  type="button"
+                  onClick={() => {
+                    store.undo();
+                    showNotice("실행을 취소했습니다.");
+                  }}
+                  disabled={!store.canUndo}
+                  className="button-secondary h-9 px-3 text-xs"
+                  title="Ctrl+Z"
+                >
+                  ↶ {UI.undo}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    store.redo();
+                    showNotice("다시 실행했습니다.");
+                  }}
+                  disabled={!store.canRedo}
+                  className="button-secondary h-9 px-3 text-xs"
+                  title="Ctrl+Shift+Z"
+                >
+                  ↷ {UI.redo}
+                </button>
+
+                <div className="relative ml-auto min-w-[220px] flex-1 shrink-0 sm:max-w-xs">
+                  <label htmlFor="reaction-search" className="sr-only">
+                    {UI.search}
+                  </label>
+                  <input
+                    id="reaction-search"
+                    type="search"
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                    placeholder={`${UI.search} (개수·텍스트·배지)`}
+                    className={`h-9 w-full rounded-md border px-3 pr-9 text-sm outline-none ${INPUT_CLASS}`}
+                  />
+                  {searchQuery ? (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery("")}
+                      aria-label="검색어 지우기"
+                      className="absolute right-1 top-1 grid h-7 w-7 place-items-center rounded text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                    >
+                      ×
+                    </button>
+                  ) : null}
+                </div>
+                <span className={`shrink-0 text-xs font-bold ${MUTED_CLASS}`}>
+                  {searchQuery ? `검색 ${filteredItems.length}개 / ` : ""}
+                  {UI.selected} {store.selectedCount}개 / {UI.total} {store.items.length}개
+                </span>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 border-t border-zinc-200 pt-3 dark:border-zinc-800">
+                <label className="button-primary relative inline-flex h-9 items-center overflow-hidden px-3 text-xs">
+                  <span>{UI.csvUpload}</span>
+                  <input
+                    id="reaction-csv-upload"
+                    type="file"
+                    accept=".csv,text/csv"
+                    onChange={handleCsvImport}
+                    aria-label="CSV 업로드"
+                    className="absolute inset-0 cursor-pointer opacity-0"
+                  />
+                </label>
+                <button type="button" onClick={downloadCurrentCsv} className="button-secondary h-9 px-3 text-xs">
+                  CSV 다운로드
+                </button>
+                <button type="button" onClick={downloadCsvExample} className="button-secondary h-9 px-3 text-xs">
+                  예시 CSV
+                </button>
+                <span className={`text-xs font-medium ${MUTED_CLASS}`}>{UI.csvTopHint}</span>
+                <details className="basis-full text-xs text-zinc-600 dark:text-zinc-300">
+                  <summary className="w-fit cursor-pointer font-bold hover:text-zinc-950 dark:hover:text-white">
+                    CSV 형식과 예시 보기
+                  </summary>
+                  <div className="mt-3 grid gap-3 rounded-md border border-dashed border-zinc-300 bg-zinc-50 p-3 md:grid-cols-[minmax(0,1fr)_320px] dark:border-zinc-700 dark:bg-zinc-950">
+                    <ul className="space-y-1">
+                      <li>{UI.csvGuideReplace}</li>
+                      <li>{UI.csvGuideHeader}</li>
+                      <li>{UI.csvHint}</li>
+                    </ul>
+                    <pre className="overflow-x-auto rounded-md bg-zinc-950 p-3 font-mono leading-5 text-zinc-100">
+                      {csvExample}
+                    </pre>
+                  </div>
+                </details>
+              </div>
+
+              <details
+                open={bulkApplyOpen}
+                onToggle={(event) => setBulkApplyOpen(event.currentTarget.open)}
+                className="group border-t border-zinc-200 text-sm dark:border-zinc-800"
+              >
+                <summary className="flex cursor-pointer list-none items-center gap-3 pt-3 font-black [&::-webkit-details-marker]:hidden">
+                  <span>{UI.bulkTitle}</span>
+                  <span className={`font-medium ${MUTED_CLASS}`}>
+                    {UI.selected} {store.selectedCount}개
+                    {store.selectedCount === 0 ? UI.noSelectionSuffix : ""}
+                  </span>
+                  <span className={`ml-auto text-xs font-medium ${MUTED_CLASS}`}>
+                    <span className="group-open:hidden">색상·배지·템플릿 펼치기</span>
+                    <span className="hidden group-open:inline">일괄 적용 접기</span>
+                  </span>
+                </summary>
+
+                <div className="pt-4">
+                  <p className={`mb-4 ${MUTED_CLASS}`}>{UI.bulkHint}</p>
+
+                  <div className="mb-4 grid gap-4 xl:grid-cols-2">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span className="font-bold">{UI.bulkCount}</span>
+                      <ColorInput label={UI.bulkCountLabel} value={bulkCountColor} onChange={setBulkCountColor} />
+                      <button type="button" onClick={applyBulkCountColor} className="button-secondary">
+                        {UI.bulkCountApply}
+                      </button>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span className="font-bold">{UI.bulkText}</span>
+                      <ColorInput label={UI.bulkTextLabel} value={bulkTextColor} onChange={setBulkTextColor} />
+                      <button type="button" onClick={applyBulkTextColor} className="button-secondary">
+                        {UI.bulkTextApply}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="mb-4 flex flex-wrap items-start gap-3">
+                    <div className="flex min-w-[280px] flex-1 flex-wrap items-center gap-3">
+                      <span className="font-bold">배지</span>
+                      <BadgeEditor value={bulkBadges} onChange={setBulkBadges} />
+                      <button type="button" onClick={applyBulkBadges} className="button-secondary">
+                        배지 적용
+                      </button>
+                    </div>
+
+                    <button type="button" onClick={applyBulkBothColors} className="button-primary">
+                      {UI.bulkBothApply}
+                    </button>
+                  </div>
+
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <span className="font-bold">색상 템플릿</span>
+                    <span className={`text-xs ${MUTED_CLASS}`}>숫자와 텍스트 색상을 함께 적용</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {STYLE_PRESETS.map((preset) => (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        onClick={() => applyStylePreset(preset.id)}
+                        className="flex items-center gap-2 rounded-md border border-zinc-300 bg-white px-3 py-2 font-bold text-zinc-800 hover:border-zinc-950 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:hover:border-zinc-400"
+                      >
+                        <span className="flex gap-1" aria-hidden="true">
+                          <span
+                            className="h-5 w-5 rounded border border-zinc-300 dark:border-zinc-700"
+                            style={{
+                              background:
+                                preset.countColor.mode === "solid"
+                                  ? preset.countColor.color
+                                  : `linear-gradient(${preset.countColor.direction === "vertical" ? "180deg" : "90deg"}, ${preset.countColor.from}, ${preset.countColor.to})`,
+                            }}
+                          />
+                          <span
+                            className="h-5 w-5 rounded border border-zinc-300 dark:border-zinc-700"
+                            style={{
+                              background:
+                                preset.textColor.mode === "solid"
+                                  ? preset.textColor.color
+                                  : `linear-gradient(${preset.textColor.direction === "vertical" ? "180deg" : "90deg"}, ${preset.textColor.from}, ${preset.textColor.to})`,
+                            }}
+                          />
+                        </span>
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </details>
+        </section>
+
+        <div aria-hidden="true" style={{ height: toolbarHeight + 8 }} />
+
+        <p className={`mb-5 mt-5 max-w-3xl text-sm leading-6 ${MUTED_CLASS}`}>
           {UI.subtitle} 버그 및 기능개선 의견은 문의 버튼을 눌러서 쪽지 주시면 감사하겠습니다.
         </p>
 
         <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
           <div className="min-w-0 space-y-6">
-            <section className={`flex flex-wrap items-center gap-2 rounded-md border p-3 ${SURFACE_CLASS}`}>
-              <button type="button" onClick={store.addItem} className="button-primary h-9 px-3 text-xs">
-                {UI.add}
-              </button>
-              <button
-                type="button"
-                onClick={() => setCenterTextModalOpen(true)}
-                className="button-secondary h-9 px-3 text-xs"
-              >
-                {UI.addCenterText}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  store.deleteSelected();
-                  showNotice(UI.deleted);
-                }}
-                disabled={store.selectedCount === 0}
-                className="button-secondary h-9 px-3 text-xs"
-              >
-                {UI.remove}
-              </button>
-              <span className={`ml-auto text-xs font-bold ${MUTED_CLASS}`}>
-                {UI.selected} {store.selectedCount}개 / {UI.total} {store.items.length}개
-              </span>
-            </section>
 
             <ReactionTable
-              items={store.items}
+              items={filteredItems}
+              itemNumberById={itemNumberById}
+              emptyMessage={searchQuery ? UI.noSearchResults : undefined}
               selectedIds={store.selectedIds}
-              allSelected={store.allSelected}
+              allSelected={allFilteredSelected}
               activeBadgeItemId={activeBadgeItemId}
-              onToggleAll={store.toggleAll}
+              onToggleAll={() => store.toggleSelectedIds(filteredItemIds)}
               onToggleSelected={store.toggleSelected}
               onUpdateItem={store.updateItem}
               onMoveItem={store.moveItem}
               onOpenBadgePanel={setActiveBadgeItemId}
             />
 
-            <section className={`rounded-md border p-4 ${SURFACE_CLASS}`}>
-              <div className="mb-3 flex flex-wrap items-center gap-3">
-                <h2 className="text-sm font-black">{UI.bulkTitle}</h2>
-                <span className={`text-sm ${MUTED_CLASS}`}>
-                  {UI.selected} {store.selectedCount}개
-                  {store.selectedCount === 0 ? UI.noSelectionSuffix : ""}
-                </span>
-              </div>
-              <p className={`mb-4 text-sm ${MUTED_CLASS}`}>{UI.bulkHint}</p>
-
-              <div className="mb-4 grid gap-4 xl:grid-cols-2">
-                <div className="flex flex-wrap items-center gap-3">
-                  <span className="text-sm font-bold">{UI.bulkCount}</span>
-                  <ColorInput label={UI.bulkCountLabel} value={bulkCountColor} onChange={setBulkCountColor} />
-                  <button type="button" onClick={applyBulkCountColor} className="button-secondary">
-                    {UI.bulkCountApply}
-                  </button>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-3">
-                  <span className="text-sm font-bold">{UI.bulkText}</span>
-                  <ColorInput label={UI.bulkTextLabel} value={bulkTextColor} onChange={setBulkTextColor} />
-                  <button type="button" onClick={applyBulkTextColor} className="button-secondary">
-                    {UI.bulkTextApply}
-                  </button>
-                </div>
-              </div>
-
-              <div className="mb-4 flex flex-wrap items-start gap-3">
-                <div className="flex min-w-[320px] flex-1 flex-wrap items-center gap-3">
-                  <span className="text-sm font-bold">배지</span>
-                  <BadgeEditor value={bulkBadges} onChange={setBulkBadges} />
-                  <button type="button" onClick={applyBulkBadges} className="button-secondary">
-                    배지 적용
-                  </button>
-                </div>
-
-                <div className="flex items-center">
-                  <button type="button" onClick={applyBulkBothColors} className="button-primary">
-                    {UI.bulkBothApply}
-                  </button>
-                </div>
-              </div>
-
-              <div className="mb-2 flex items-center justify-between gap-3">
-                <span className="text-sm font-bold">색상 템플릿</span>
-                <span className={`text-xs ${MUTED_CLASS}`}>숫자와 텍스트 색상을 함께 적용</span>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {STYLE_PRESETS.map((preset) => (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    onClick={() => applyStylePreset(preset.id)}
-                    className="flex items-center gap-2 rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm font-bold text-zinc-800 hover:border-zinc-950 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:hover:border-zinc-400"
-                  >
-                    <span className="flex gap-1" aria-hidden="true">
-                      <span
-                        className="h-5 w-5 rounded border border-zinc-300 dark:border-zinc-700"
-                        style={{
-                          background:
-                            preset.countColor.mode === "solid"
-                              ? preset.countColor.color
-                              : `linear-gradient(${preset.countColor.direction === "vertical" ? "180deg" : "90deg"}, ${preset.countColor.from}, ${preset.countColor.to})`,
-                        }}
-                      />
-                      <span
-                        className="h-5 w-5 rounded border border-zinc-300 dark:border-zinc-700"
-                        style={{
-                          background:
-                            preset.textColor.mode === "solid"
-                              ? preset.textColor.color
-                              : `linear-gradient(${preset.textColor.direction === "vertical" ? "180deg" : "90deg"}, ${preset.textColor.from}, ${preset.textColor.to})`,
-                        }}
-                      />
-                    </span>
-                    {preset.label}
-                  </button>
-                ))}
-              </div>
-            </section>
-
-            <details className={`rounded-md border ${SURFACE_CLASS}`} open={false}>
-              <summary className="cursor-pointer px-4 py-3 text-sm font-bold">
-                {UI.csvTitle} <span className={`ml-2 text-xs font-medium ${MUTED_CLASS}`}>{UI.csvHint}</span>
-              </summary>
-              <div className="grid gap-4 border-t border-zinc-200 p-4 lg:grid-cols-[minmax(0,1fr)_360px] dark:border-zinc-800">
-                <div className="space-y-4">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <label className="button-primary relative inline-flex items-center overflow-hidden">
-                      <span>{UI.csvUpload}</span>
-                      <input
-                        id="reaction-csv-upload"
-                        type="file"
-                        accept=".csv,text/csv"
-                        onChange={handleCsvImport}
-                        aria-label="CSV 업로드"
-                        className="absolute inset-0 cursor-pointer opacity-0"
-                      />
-                    </label>
-                    <button type="button" onClick={downloadCurrentCsv} className="button-secondary">
-                      {UI.csvDownloadCurrent}
-                    </button>
-                    <button type="button" onClick={downloadCsvExample} className="button-secondary">
-                      {UI.csvExampleDownload}
-                    </button>
-                  </div>
-
-                  <div className="rounded-md border border-dashed border-zinc-300 bg-zinc-50 p-4 text-sm text-zinc-600 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300">
-                    <p className="font-bold text-zinc-800 dark:text-zinc-100">{UI.csvGuide}</p>
-                    <ul className="mt-2 space-y-1">
-                      <li>{UI.csvGuideReplace}</li>
-                      <li>{UI.csvGuideHeader}</li>
-                    </ul>
-                  </div>
-                </div>
-
-                <div className="rounded-md border border-zinc-200 bg-zinc-950 p-4 text-sm text-zinc-100 dark:border-zinc-800">
-                  <div className="mb-2 flex items-center justify-between gap-3">
-                    <p className="font-bold">{UI.csvExampleTitle}</p>
-                    <span className="text-xs text-zinc-400">{UI.csvExampleFormat}</span>
-                  </div>
-                  <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-md bg-black/40 p-3 font-mono text-xs leading-6">
-                    {csvExample}
-                  </pre>
-                </div>
-              </div>
-            </details>
           </div>
 
-          <aside className="min-w-0 space-y-4 xl:sticky xl:top-[86px]">
+          <aside
+            data-scroll-region="settings-sidebar"
+            className="settings-sidebar min-w-0 space-y-4"
+            style={{ "--settings-sidebar-top": `${headerHeight + toolbarHeight + 24}px` } as CSSProperties}
+          >
             <section className={`rounded-md border ${SURFACE_CLASS}`}>
               <div className="flex items-center justify-between gap-3 px-4 py-3">
                 <h2 className="text-sm font-black">{UI.previewDock}</h2>
@@ -620,10 +828,21 @@ export default function Home() {
                   <PreviewDock items={store.items} options={renderOptions} />
                 </div>
               ) : null}
-              <div className="border-t border-zinc-200 px-4 py-3 dark:border-zinc-800">
+              <div className="space-y-2 border-t border-zinc-200 px-4 py-3 dark:border-zinc-800">
                 <button type="button" onClick={openPreview} className="button-primary w-full">
                   {UI.openPreview}
                 </button>
+                <button
+                  type="button"
+                  onClick={copyObsOverlayLink}
+                  disabled={isCopyingObsLink || store.items.length === 0}
+                  className="button-secondary w-full"
+                >
+                  {isCopyingObsLink ? "링크 생성 중..." : UI.obsOverlay}
+                </button>
+                <p className={`text-center text-[11px] leading-4 ${MUTED_CLASS}`}>
+                  메뉴를 수정한 뒤에는 새 링크를 다시 복사해 OBS 소스 URL을 교체하세요.
+                </p>
               </div>
             </section>
 
@@ -838,6 +1057,43 @@ export default function Home() {
               className="button-primary"
             >
               {UI.csvConfirmApply}
+            </button>
+          </div>
+        </Dialog>
+      ) : null}
+
+      {obsOverlayUrl ? (
+        <Dialog
+          title="OBS 오버레이 링크"
+          description="OBS 브라우저 소스의 URL 칸에 아래 주소를 넣어 주세요."
+          onClose={() => setObsOverlayUrl(null)}
+        >
+          <label htmlFor="obs-overlay-url" className="block text-sm font-bold text-zinc-700 dark:text-zinc-200">
+            OBS 오버레이 URL
+          </label>
+          <textarea
+            id="obs-overlay-url"
+            readOnly
+            value={obsOverlayUrl}
+            rows={4}
+            className={`mt-2 w-full resize-none rounded-md border p-3 font-mono text-xs leading-5 outline-none ${INPUT_CLASS}`}
+          />
+          <p className={`mt-2 text-xs leading-5 ${MUTED_CLASS}`}>
+            항목이나 출력 설정을 변경하면 이 창을 닫고 새 링크를 다시 생성해 주세요.
+          </p>
+          <div className="mt-5 flex flex-wrap justify-end gap-2">
+            <a href={obsOverlayUrl} target="_blank" rel="noreferrer" className="button-secondary">
+              새 탭에서 테스트
+            </a>
+            <button
+              type="button"
+              onClick={async () => {
+                const copied = await copyText(obsOverlayUrl);
+                showNotice(copied ? "OBS 오버레이 링크를 복사했습니다." : "주소를 직접 선택해 복사해 주세요.");
+              }}
+              className="button-primary"
+            >
+              링크 복사
             </button>
           </div>
         </Dialog>

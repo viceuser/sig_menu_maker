@@ -320,6 +320,14 @@ export function loadMenuConfig(): MenuConfig {
   return { items, ...config };
 }
 
+export function normalizeMenuConfigValue(value: unknown): MenuConfig | null {
+  if (!isObject(value)) return null;
+
+  const { items } = normalizeItemsPayload(value.items);
+  const { config } = normalizeConfigPayload(value);
+  return { items, ...config };
+}
+
 export function saveMenuConfig(config: MenuConfig) {
   saveItems(config.items);
   saveConfig({

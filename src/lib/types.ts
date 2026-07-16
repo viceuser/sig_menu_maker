@@ -1,3 +1,5 @@
+import type { FontPresetId } from "./fonts";
+
 export type GradientDirection = "horizontal" | "vertical";
 export type TextEffect = "none" | "shadow" | "neon" | "double-outline" | "extrude";
 export type BadgeShape = "pill" | "rectangle" | "outline" | "ribbon";
@@ -47,7 +49,7 @@ export interface MenuConfig {
   items: ReactionItem[];
   itemsPerPage: number;
   fadeInterval: number;
-  fontPreset: string;
+  fontPreset: FontPresetId;
   fontSize: number;
   contentAlign: ContentAlign;
   strokeWidth: number;
