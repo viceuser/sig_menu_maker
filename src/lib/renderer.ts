@@ -1,6 +1,6 @@
 import { getFontPreset, type FontPresetId } from "./fonts";
 import { getBadgeDisplayText } from "./badges";
-import type { BadgeConfig, ContentAlign, TextPaint, ReactionItem } from "./types";
+import type { BadgeConfig, ContentAlign, TextEffect, TextPaint, ReactionItem } from "./types";
 
 export const CANVAS_WIDTH = 720;
 export const CANVAS_PADDING_X = 34;
@@ -15,6 +15,7 @@ interface RenderOptions {
   fontSize: number;
   contentAlign: ContentAlign;
   strokeWidth: number;
+  textEffect: TextEffect;
   gapMin: number;
   gapBase: number;
   gapMax: number;
@@ -125,18 +126,51 @@ function drawTextWithStroke(
   paint: TextPaint,
   align: CanvasTextAlign,
   strokeWidth: number,
+  textEffect: TextEffect,
   emphasis: "normal" | "strong" = "normal",
 ) {
   const textWidth = ctx.measureText(text).width;
   const bounds = getTextBounds(x, y, textWidth, align);
+  const fillStyle = createPaintStyle(ctx, paint, bounds, emphasis);
 
+  ctx.save();
   ctx.textAlign = align;
+  ctx.lineJoin = "round";
   ctx.lineWidth = strokeWidth;
   ctx.strokeStyle = "#000000";
-  ctx.fillStyle = createPaintStyle(ctx, paint, bounds, emphasis);
+  ctx.fillStyle = fillStyle;
+
+  if (textEffect === "shadow") {
+    ctx.shadowColor = "rgba(0, 0, 0, 0.8)";
+    ctx.shadowBlur = 3;
+    ctx.shadowOffsetX = 3;
+    ctx.shadowOffsetY = 3;
+  } else if (textEffect === "neon") {
+    ctx.shadowColor = paint.mode === "solid" ? paint.color : paint.from;
+    ctx.shadowBlur = Math.max(7, strokeWidth * 2);
+  } else if (textEffect === "double-outline") {
+    ctx.lineWidth = strokeWidth + 4;
+    ctx.strokeStyle = "#000000";
+    ctx.strokeText(text, x, y);
+    ctx.lineWidth = strokeWidth;
+    ctx.strokeStyle = "#ffffff";
+    ctx.strokeText(text, x, y);
+    ctx.fillStyle = fillStyle;
+    ctx.fillText(text, x, y);
+    ctx.restore();
+    return;
+  } else if (textEffect === "extrude") {
+    ctx.fillStyle = "#3f3f46";
+    for (let depth = 4; depth >= 1; depth -= 1) {
+      ctx.strokeText(text, x + depth, y + depth);
+      ctx.fillText(text, x + depth, y + depth);
+    }
+    ctx.fillStyle = fillStyle;
+  }
+
   ctx.strokeText(text, x, y);
   ctx.fillText(text, x, y);
-  ctx.textAlign = "left";
+  ctx.restore();
 }
 
 function getBadgeGap(baseGap: number) {
@@ -411,6 +445,7 @@ function drawLeftExampleRow(
   fontFamily: string,
   fontSize: number,
   strokeWidth: number,
+  textEffect: TextEffect,
   gapMin: number,
   gapBase: number,
   gapMax: number,
@@ -430,12 +465,12 @@ function drawLeftExampleRow(
   const maxTextWidth = Math.max(40, textRightLimit - textLeft);
 
   if (hasCount) {
-    drawTextWithStroke(ctx, countText, countLeft, centerY, item.countColor, "left", strokeWidth, "strong");
+    drawTextWithStroke(ctx, countText, countLeft, centerY, item.countColor, "left", strokeWidth, textEffect, "strong");
   }
 
   ctx.font = `500 ${fontSize}px ${fontFamily}`;
   const safeText = fitText(ctx, item.text.trim(), maxTextWidth);
-  drawTextWithStroke(ctx, safeText, textLeft, centerY, item.textColor, "left", strokeWidth);
+  drawTextWithStroke(ctx, safeText, textLeft, centerY, item.textColor, "left", strokeWidth, textEffect);
 
   if (badgeTotalWidth > 0) {
     const textWidth = ctx.measureText(safeText).width;
@@ -451,6 +486,7 @@ function drawRightExampleRow(
   fontFamily: string,
   fontSize: number,
   strokeWidth: number,
+  textEffect: TextEffect,
   gapMin: number,
   gapBase: number,
   gapMax: number,
@@ -469,12 +505,12 @@ function drawRightExampleRow(
   const maxTextWidth = Math.max(40, textRight - textLeftLimit);
 
   if (hasCount) {
-    drawTextWithStroke(ctx, countText, countRight, centerY, item.countColor, "right", strokeWidth, "strong");
+    drawTextWithStroke(ctx, countText, countRight, centerY, item.countColor, "right", strokeWidth, textEffect, "strong");
   }
 
   ctx.font = `500 ${fontSize}px ${fontFamily}`;
   const safeText = fitText(ctx, item.text.trim(), maxTextWidth);
-  drawTextWithStroke(ctx, safeText, textRight, centerY, item.textColor, "right", strokeWidth);
+  drawTextWithStroke(ctx, safeText, textRight, centerY, item.textColor, "right", strokeWidth, textEffect);
 
   if (badgeTotalWidth > 0) {
     const textWidth = ctx.measureText(safeText).width;
@@ -492,6 +528,7 @@ function drawReactionRow(
   fontSize: number,
   contentAlign: ContentAlign,
   strokeWidth: number,
+  textEffect: TextEffect,
   gapMin: number,
   gapBase: number,
   gapMax: number,
@@ -516,16 +553,17 @@ function drawReactionRow(
       item.textColor,
       "center",
       strokeWidth,
+      textEffect,
     );
     return;
   }
 
   if (contentAlign === "left") {
-    drawLeftExampleRow(ctx, item, centerY, fontFamily, fontSize, strokeWidth, gapMin, gapBase, gapMax);
+    drawLeftExampleRow(ctx, item, centerY, fontFamily, fontSize, strokeWidth, textEffect, gapMin, gapBase, gapMax);
     return;
   }
 
-  drawRightExampleRow(ctx, item, centerY, fontFamily, fontSize, strokeWidth, gapMin, gapBase, gapMax);
+  drawRightExampleRow(ctx, item, centerY, fontFamily, fontSize, strokeWidth, textEffect, gapMin, gapBase, gapMax);
 }
 
 function findCanvasContentBounds(canvas: HTMLCanvasElement, padding = 10): CropBounds {
@@ -625,6 +663,7 @@ function buildRawPageCanvases(
       fontSize: options.fontSize,
       contentAlign: options.contentAlign,
       strokeWidth: options.strokeWidth,
+      textEffect: options.textEffect,
       gapMin: options.gapMin,
       gapBase: options.gapBase,
       gapMax: options.gapMax,
@@ -668,6 +707,7 @@ function renderSingleReactionPage(
       options.fontSize,
       options.contentAlign,
       options.strokeWidth,
+      options.textEffect,
       options.gapMin,
       options.gapBase,
       options.gapMax,

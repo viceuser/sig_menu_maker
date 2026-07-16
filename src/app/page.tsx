@@ -241,6 +241,7 @@ export default function Home() {
         fontSize: store.fontSize,
         contentAlign: store.contentAlign,
         strokeWidth: store.strokeWidth,
+        textEffect: store.textEffect,
         gapMin: store.gapMin,
         gapBase: store.gapBase,
         gapMax: store.gapMax,
@@ -257,6 +258,7 @@ export default function Home() {
       store.itemsPerPage,
       store.rowHeight,
       store.strokeWidth,
+      store.textEffect,
       store.verticalPadding,
     ],
   );
@@ -515,6 +517,10 @@ export default function Home() {
                 </div>
               </div>
 
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <span className="text-sm font-bold">색상 템플릿</span>
+                <span className={`text-xs ${MUTED_CLASS}`}>숫자와 텍스트 색상을 함께 적용</span>
+              </div>
               <div className="flex flex-wrap gap-2">
                 {STYLE_PRESETS.map((preset) => (
                   <button
@@ -690,6 +696,20 @@ export default function Home() {
                 max={44}
                 onChange={(value) => store.setFontSize(value)}
               />
+              <label className="block text-sm font-bold">
+                글자 효과
+                <select
+                  value={store.textEffect}
+                  onChange={(event) => store.setTextEffect(event.target.value as typeof store.textEffect)}
+                  className={`mt-1 h-10 w-full rounded-md border px-3 text-sm outline-none ${INPUT_CLASS}`}
+                >
+                  <option value="none">없음</option>
+                  <option value="shadow">그림자</option>
+                  <option value="neon">네온 글로우</option>
+                  <option value="double-outline">이중 외곽선</option>
+                  <option value="extrude">입체 그림자</option>
+                </select>
+              </label>
               <SliderField
                 label={UI.stroke}
                 value={store.strokeWidth}

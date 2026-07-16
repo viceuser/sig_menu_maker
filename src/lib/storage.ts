@@ -12,6 +12,7 @@ import {
   DEFAULT_ITEMS_PER_PAGE,
   DEFAULT_ROW_HEIGHT,
   DEFAULT_STROKE_WIDTH,
+  DEFAULT_TEXT_EFFECT,
   DEFAULT_TEXT_COLOR,
   DEFAULT_VERTICAL_PADDING,
   type ContentAlign,
@@ -21,6 +22,7 @@ import {
   type ReactionItem,
   type ReactionRowType,
   type TextPaint,
+  type TextEffect,
 } from "./types";
 
 const ITEMS_KEY = "reaction_items";
@@ -63,6 +65,10 @@ function isObject(value: unknown): value is Record<string, unknown> {
 
 function isContentAlign(value: unknown): value is ContentAlign {
   return value === "left" || value === "right";
+}
+
+function isTextEffect(value: unknown): value is TextEffect {
+  return ["none", "shadow", "neon", "double-outline", "extrude"].includes(String(value));
 }
 
 function isReactionRowType(value: unknown): value is ReactionRowType {
@@ -202,6 +208,7 @@ function normalizeConfigPayload(value: unknown) {
     fontSize: DEFAULT_FONT_SIZE,
     contentAlign: DEFAULT_CONTENT_ALIGN,
     strokeWidth: DEFAULT_STROKE_WIDTH,
+    textEffect: DEFAULT_TEXT_EFFECT,
     gapMin: DEFAULT_GAP_MIN,
     gapBase: DEFAULT_GAP_BASE,
     gapMax: DEFAULT_GAP_MAX,
@@ -223,6 +230,7 @@ function normalizeConfigPayload(value: unknown) {
     fontSize: normalizeNumber(value.fontSize, DEFAULT_FONT_SIZE, 1),
     contentAlign: isContentAlign(value.contentAlign) ? value.contentAlign : DEFAULT_CONTENT_ALIGN,
     strokeWidth: normalizeNumber(value.strokeWidth, DEFAULT_STROKE_WIDTH, 0),
+    textEffect: isTextEffect(value.textEffect) ? value.textEffect : DEFAULT_TEXT_EFFECT,
     gapMin: normalizeNumber(value.gapMin, DEFAULT_GAP_MIN, 0),
     gapBase: normalizeNumber(value.gapBase, DEFAULT_GAP_BASE, 0),
     gapMax: normalizeNumber(value.gapMax, DEFAULT_GAP_MAX, 0),
@@ -237,6 +245,7 @@ function normalizeConfigPayload(value: unknown) {
     config.fontSize !== value.fontSize ||
     config.contentAlign !== value.contentAlign ||
     config.strokeWidth !== value.strokeWidth ||
+    config.textEffect !== value.textEffect ||
     config.gapMin !== value.gapMin ||
     config.gapBase !== value.gapBase ||
     config.gapMax !== value.gapMax ||
@@ -294,6 +303,7 @@ export function saveConfig(
     | "fontSize"
     | "contentAlign"
     | "strokeWidth"
+    | "textEffect"
     | "gapMin"
     | "gapBase"
     | "gapMax"
@@ -319,6 +329,7 @@ export function saveMenuConfig(config: MenuConfig) {
     fontSize: config.fontSize,
     contentAlign: config.contentAlign,
     strokeWidth: config.strokeWidth,
+    textEffect: config.textEffect,
     gapMin: config.gapMin,
     gapBase: config.gapBase,
     gapMax: config.gapMax,

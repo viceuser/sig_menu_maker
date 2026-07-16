@@ -71,4 +71,22 @@ export const STYLE_PRESETS: StylePreset[] = [
     countColor: { mode: "gradient", from: "#d9f2ff", to: "#5ac8fa", direction: "horizontal" },
     textColor: { mode: "gradient", from: "#ffffff", to: "#8be9ff", direction: "horizontal" },
   },
+  {
+    id: "broadcast-blue",
+    label: "방송 블루",
+    countColor: { mode: "gradient", from: "#2979ff", to: "#ffffff", direction: "vertical" },
+    textColor: { mode: "solid", color: "#ffffff" },
+  },
+  {
+    id: "sunset-impact",
+    label: "선셋 임팩트",
+    countColor: { mode: "gradient", from: "#ff3b30", to: "#ffd60a", direction: "vertical" },
+    textColor: { mode: "gradient", from: "#fff3e0", to: "#ffffff", direction: "horizontal" },
+  },
+  {
+    id: "purple-neon",
+    label: "퍼플 네온",
+    countColor: { mode: "gradient", from: "#7c4dff", to: "#ff80ab", direction: "vertical" },
+    textColor: { mode: "gradient", from: "#ffffff", to: "#e8ddff", direction: "horizontal" },
+  },
 ];

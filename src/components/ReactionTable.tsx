@@ -16,7 +16,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { getBadgeDisplayText } from "@/lib/badges";
 import type { ReactionItem } from "@/lib/types";
 import { ColorInput } from "./ColorInput";
@@ -44,6 +44,9 @@ export function ReactionTable({
   onMoveItem,
   onOpenBadgePanel,
 }: ReactionTableProps) {
+  const topScrollRef = useRef<HTMLDivElement>(null);
+  const tableScrollRef = useRef<HTMLDivElement>(null);
+  const [tableScrollWidth, setTableScrollWidth] = useState(1100);
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -54,10 +57,51 @@ export function ReactionTable({
     if (over && active.id !== over.id) onMoveItem(String(active.id), String(over.id));
   };
 
+  useEffect(() => {
+    const topScroll = topScrollRef.current;
+    const tableScroll = tableScrollRef.current;
+    if (!topScroll || !tableScroll) return;
+
+    let syncing = false;
+    const syncTop = () => {
+      if (syncing) return;
+      syncing = true;
+      topScroll.scrollLeft = tableScroll.scrollLeft;
+      syncing = false;
+    };
+    const syncTable = () => {
+      if (syncing) return;
+      syncing = true;
+      tableScroll.scrollLeft = topScroll.scrollLeft;
+      syncing = false;
+    };
+    const updateScrollWidth = () => setTableScrollWidth(tableScroll.scrollWidth);
+
+    updateScrollWidth();
+    topScroll.addEventListener("scroll", syncTable, { passive: true });
+    tableScroll.addEventListener("scroll", syncTop, { passive: true });
+    const resizeObserver = new ResizeObserver(updateScrollWidth);
+    resizeObserver.observe(tableScroll);
+
+    return () => {
+      topScroll.removeEventListener("scroll", syncTable);
+      tableScroll.removeEventListener("scroll", syncTop);
+      resizeObserver.disconnect();
+    };
+  }, [items.length]);
+
   return (
-    <div className="overflow-x-auto border-y border-zinc-200 dark:border-zinc-800">
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-        <table className="w-full min-w-[1380px] border-collapse text-left text-sm">
+    <div className="border-y border-zinc-200 dark:border-zinc-800">
+      <div
+        ref={topScrollRef}
+        aria-label="Horizontal table scroll"
+        className="sticky top-[65px] z-30 h-4 overflow-x-auto overflow-y-hidden border-b border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950"
+      >
+        <div className="h-px" style={{ width: tableScrollWidth }} />
+      </div>
+      <div ref={tableScrollRef} className="overflow-x-auto">
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <table className="w-full min-w-[1100px] table-fixed border-collapse text-left text-sm">
           <thead className="bg-zinc-100 text-xs font-bold uppercase text-zinc-600 dark:bg-zinc-900 dark:text-zinc-400">
             <tr>
               <Th className="w-12 text-center">Drag</Th>
@@ -71,11 +115,11 @@ export function ReactionTable({
                   className="h-4 w-4 accent-zinc-950"
                 />
               </Th>
-              <Th className="w-36">Count</Th>
+              <Th className="w-28">Count</Th>
               <Th>Reaction Text</Th>
-              <Th className="w-[260px]">Badge</Th>
-              <Th className="w-[280px]">Count Color</Th>
-              <Th className="w-[280px]">Text Color</Th>
+              <Th className="w-[200px]">Badge</Th>
+              <Th className="w-[225px]">Count Color</Th>
+              <Th className="w-[225px]">Text Color</Th>
             </tr>
           </thead>
           <SortableContext items={items.map((item) => item.id)} strategy={verticalListSortingStrategy}>
@@ -94,14 +138,15 @@ export function ReactionTable({
               ))}
             </tbody>
           </SortableContext>
-        </table>
-      </DndContext>
+          </table>
+        </DndContext>
 
       {items.length === 0 ? (
         <div className="grid min-h-40 place-items-center bg-white text-sm text-zinc-500 dark:bg-zinc-950 dark:text-zinc-400">
           행을 추가해서 리액션 메뉴판을 만들어보세요.
         </div>
-      ) : null}
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -179,7 +224,7 @@ function ReactionRow({
               count: event.target.value === "" ? null : Number(event.target.value),
             })
           }
-          className="h-9 w-28 rounded-md border border-zinc-300 bg-white px-2 font-mono outline-none focus:border-zinc-950 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-white dark:disabled:bg-zinc-800 dark:disabled:text-zinc-500"
+          className="h-9 w-24 rounded-md border border-zinc-300 bg-white px-2 font-mono outline-none focus:border-zinc-950 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-white dark:disabled:bg-zinc-800 dark:disabled:text-zinc-500"
         />
       </Td>
       <Td>
@@ -193,7 +238,7 @@ function ReactionRow({
             value={item.text}
             onChange={(event) => onUpdateItem(item.id, { text: event.target.value })}
             placeholder={isCenterTextRow ? "가운데 문구를 입력하세요" : "리액션 텍스트"}
-            className="h-9 w-full min-w-48 rounded-md border border-zinc-300 bg-white px-3 outline-none focus:border-zinc-950 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-white"
+            className="h-9 w-full min-w-44 rounded-md border border-zinc-300 bg-white px-3 outline-none focus:border-zinc-950 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-white"
           />
         </div>
       </Td>
@@ -203,7 +248,7 @@ function ReactionRow({
           disabled={isCenterTextRow}
           onClick={() => onOpenBadgePanel(item.id)}
           className={[
-            "inline-flex min-w-44 items-center justify-between gap-3 rounded-md border px-3 py-2 text-left transition",
+            "inline-flex min-w-40 items-center justify-between gap-3 rounded-md border px-3 py-2 text-left transition",
             isCenterTextRow
               ? "cursor-not-allowed border-zinc-200 bg-zinc-50 text-zinc-400 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-600"
               : isBadgePanelOpen
@@ -264,7 +309,7 @@ function ReactionRow({
 
 function Th({ className = "", children }: { className?: string; children: ReactNode }) {
   return (
-    <th className={`border-r border-zinc-200 px-3 py-3 last:border-r-0 dark:border-zinc-800 ${className}`}>
+    <th className={`border-r border-zinc-200 px-2 py-3 last:border-r-0 dark:border-zinc-800 ${className}`}>
       {children}
     </th>
   );
@@ -272,7 +317,7 @@ function Th({ className = "", children }: { className?: string; children: ReactN
 
 function Td({ className = "", children }: { className?: string; children: ReactNode }) {
   return (
-    <td className={`border-r border-zinc-100 px-3 py-3 last:border-r-0 dark:border-zinc-900 ${className}`}>
+    <td className={`border-r border-zinc-100 px-2 py-3 last:border-r-0 dark:border-zinc-900 ${className}`}>
       {children}
     </td>
   );

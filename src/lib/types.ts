@@ -1,4 +1,5 @@
 export type GradientDirection = "horizontal" | "vertical";
+export type TextEffect = "none" | "shadow" | "neon" | "double-outline" | "extrude";
 export type BadgeShape = "pill" | "rectangle" | "outline" | "ribbon";
 export type BadgeSize = "sm" | "md" | "lg";
 export type BadgeStyleTone = "normal" | "neon" | "retro";
@@ -50,6 +51,7 @@ export interface MenuConfig {
   fontSize: number;
   contentAlign: ContentAlign;
   strokeWidth: number;
+  textEffect: TextEffect;
   gapMin: number;
   gapBase: number;
   gapMax: number;
@@ -87,6 +89,7 @@ export const DEFAULT_FADE_INTERVAL = 5;
 export const DEFAULT_CONTENT_ALIGN: ContentAlign = "left";
 export const DEFAULT_FONT_SIZE = 28;
 export const DEFAULT_STROKE_WIDTH = 4;
+export const DEFAULT_TEXT_EFFECT: TextEffect = "none";
 export const DEFAULT_GAP_MIN = 6;
 export const DEFAULT_GAP_BASE = 6;
 export const DEFAULT_GAP_MAX = 16;

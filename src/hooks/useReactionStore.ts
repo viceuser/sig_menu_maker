@@ -16,10 +16,12 @@ import {
   DEFAULT_ITEMS_PER_PAGE,
   DEFAULT_ROW_HEIGHT,
   DEFAULT_STROKE_WIDTH,
+  DEFAULT_TEXT_EFFECT,
   DEFAULT_TEXT_COLOR,
   DEFAULT_VERTICAL_PADDING,
   type ContentAlign,
   type ReactionItem,
+  type TextEffect,
 } from "@/lib/types";
 import { loadMenuConfig, saveItems, saveMenuConfig } from "@/lib/storage";
 
@@ -64,6 +66,7 @@ export function useReactionStore() {
   const [fontSize, setFontSize] = useState(DEFAULT_FONT_SIZE);
   const [contentAlign, setContentAlign] = useState<ContentAlign>(DEFAULT_CONTENT_ALIGN);
   const [strokeWidth, setStrokeWidth] = useState(DEFAULT_STROKE_WIDTH);
+  const [textEffect, setTextEffect] = useState<TextEffect>(DEFAULT_TEXT_EFFECT);
   const [gapMin, setGapMin] = useState(DEFAULT_GAP_MIN);
   const [gapBase, setGapBase] = useState(DEFAULT_GAP_BASE);
   const [gapMax, setGapMax] = useState(DEFAULT_GAP_MAX);
@@ -84,6 +87,7 @@ export function useReactionStore() {
     setFontSize(config.fontSize || DEFAULT_FONT_SIZE);
     setContentAlign(config.contentAlign);
     setStrokeWidth(config.strokeWidth || DEFAULT_STROKE_WIDTH);
+    setTextEffect(config.textEffect || DEFAULT_TEXT_EFFECT);
     setGapMin(config.gapMin || DEFAULT_GAP_MIN);
     setGapBase(config.gapBase || DEFAULT_GAP_BASE);
     setGapMax(config.gapMax || DEFAULT_GAP_MAX);
@@ -120,6 +124,7 @@ export function useReactionStore() {
         fontSize,
         contentAlign,
         strokeWidth,
+        textEffect,
         gapMin,
         gapBase,
         gapMax,
@@ -143,6 +148,7 @@ export function useReactionStore() {
     itemsPerPage,
     rowHeight,
     strokeWidth,
+    textEffect,
     verticalPadding,
   ]);
 
@@ -255,6 +261,7 @@ export function useReactionStore() {
       fontSize,
       contentAlign,
       strokeWidth,
+      textEffect,
       gapMin,
       gapBase,
       gapMax,
@@ -273,6 +280,7 @@ export function useReactionStore() {
     itemsPerPage,
     rowHeight,
     strokeWidth,
+    textEffect,
     verticalPadding,
   ]);
 
@@ -288,6 +296,7 @@ export function useReactionStore() {
       fontSize,
       contentAlign,
       strokeWidth,
+      textEffect,
       gapMin,
       gapBase,
       gapMax,
@@ -303,6 +312,7 @@ export function useReactionStore() {
       setFontSize,
       setContentAlign,
       setStrokeWidth,
+      setTextEffect,
       setGapMin,
       setGapBase,
       setGapMax,
@@ -348,6 +358,7 @@ export function useReactionStore() {
       saveState,
       selectedIds,
       strokeWidth,
+      textEffect,
       toggleAll,
       toggleSelected,
       updateItem,

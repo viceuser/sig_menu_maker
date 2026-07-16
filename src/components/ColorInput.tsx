@@ -366,7 +366,7 @@ export function ColorInput({ value, onChange, label }: ColorInputProps) {
 
   return (
     <>
-      <div ref={wrapperRef} className="relative flex min-w-48 items-center gap-2">
+      <div ref={wrapperRef} className="relative flex min-w-[200px] items-center gap-1.5">
         <select
           aria-label={`${label} 모드`}
           value={draft.mode}
@@ -384,7 +384,7 @@ export function ColorInput({ value, onChange, label }: ColorInputProps) {
               direction: draft.mode === "gradient" ? draft.direction : "horizontal",
             });
           }}
-          className="h-9 rounded-md border border-zinc-300 bg-white px-2 text-sm outline-none focus:border-zinc-950 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-zinc-300"
+          className="h-9 w-[86px] rounded-md border border-zinc-300 bg-white px-1 text-sm outline-none focus:border-zinc-950 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-zinc-300"
         >
           <option value="solid">단색</option>
           <option value="gradient">그라데이션</option>
@@ -400,7 +400,7 @@ export function ColorInput({ value, onChange, label }: ColorInputProps) {
               syncDraftToParent(draft);
             }
           }}
-          className="h-9 w-28 rounded-md border border-zinc-300 bg-white px-2 font-mono text-sm text-zinc-900 outline-none focus:border-zinc-950 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-zinc-300"
+          className="h-9 min-w-0 flex-1 rounded-md border border-zinc-300 bg-white px-2 font-mono text-sm text-zinc-900 outline-none focus:border-zinc-950 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-zinc-300"
         />
 
         <button
@@ -408,7 +408,7 @@ export function ColorInput({ value, onChange, label }: ColorInputProps) {
           type="button"
           aria-label={`${label} 팔레트 열기`}
           onClick={togglePalette}
-          className="h-7 w-7 rounded-md border border-zinc-300 transition hover:scale-110 hover:border-zinc-900 dark:border-zinc-700 dark:hover:border-zinc-300"
+          className="h-7 w-7 shrink-0 rounded-md border border-zinc-300 transition hover:scale-110 hover:border-zinc-900 dark:border-zinc-700 dark:hover:border-zinc-300"
           style={createPaintPreviewStyle(draft)}
         />
       </div>

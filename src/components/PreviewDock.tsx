@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { renderReactionCanvases } from "@/lib/renderer";
-import type { ContentAlign, ReactionItem } from "@/lib/types";
+import type { ContentAlign, ReactionItem, TextEffect } from "@/lib/types";
 import type { FontPresetId } from "@/lib/fonts";
 
 const DOCK_OPEN_KEY = "realtime_preview_panel_open";
@@ -13,6 +13,7 @@ type RenderOptions = {
   fontSize: number;
   contentAlign: ContentAlign;
   strokeWidth: number;
+  textEffect: TextEffect;
   gapMin: number;
   gapBase: number;
   gapMax: number;
