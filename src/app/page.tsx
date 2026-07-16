@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { BadgeEditor } from "@/components/BadgeEditor";
 import { BadgeFloatingPanel } from "@/components/BadgeFloatingPanel";
 import { ColorInput } from "@/components/ColorInput";
@@ -178,9 +178,19 @@ function cloneBadges(badges: BadgeConfig[]) {
   }));
 }
 
+function clonePaint(paint: TextPaint): TextPaint {
+  return paint.mode === "solid" ? { ...paint } : { ...paint };
+}
+
+type ToastState = {
+  id: number;
+  message: string;
+};
+
 export default function Home() {
   const store = useReactionStore();
   const [status, setStatus] = useState<string>(UI.ready);
+  const [toast, setToast] = useState<ToastState | null>(null);
   const [bulkCountColor, setBulkCountColor] = useState<TextPaint>(DEFAULT_COUNT_COLOR);
   const [bulkTextColor, setBulkTextColor] = useState<TextPaint>(DEFAULT_TEXT_COLOR);
   const [bulkBadges, setBulkBadges] = useState<BadgeConfig[]>([]);
@@ -204,6 +214,16 @@ export default function Home() {
   useEffect(() => {
     saveRealtimePreviewPanelOpen(realtimePreviewOpen);
   }, [realtimePreviewOpen]);
+
+  useEffect(() => {
+    if (!toast) return;
+
+    const timer = window.setTimeout(() => {
+      setToast((current) => (current?.id === toast.id ? null : current));
+    }, 2400);
+
+    return () => window.clearTimeout(timer);
+  }, [toast]);
 
   const pagesCount = useMemo(
     () => Math.max(1, Math.ceil(store.items.length / Math.max(1, store.itemsPerPage))),
@@ -247,19 +267,24 @@ export default function Home() {
     : "border-zinc-300 bg-white text-zinc-950 focus:border-zinc-950";
   const subtlePanelClass = darkMode ? "border-zinc-800 bg-zinc-950 text-zinc-300" : "border-zinc-300 bg-zinc-50 text-zinc-600";
 
+  const showNotice = useCallback((message: string) => {
+    setStatus(message);
+    setToast({ id: Date.now(), message });
+  }, []);
+
   const applyPatchByScope = (patch: Partial<ReactionItem>, doneMessage: string) => {
     if (store.selectedCount > 0) {
       store.applyToSelected(patch);
-      setStatus(`${doneMessage} ${UI.selectedAppliedSuffix}`);
+      showNotice(`${doneMessage} ${UI.selectedAppliedSuffix}`);
       return;
     }
 
     store.applyToAll(patch);
-    setStatus(`${doneMessage} ${UI.allAppliedSuffix}`);
+    showNotice(`${doneMessage} ${UI.allAppliedSuffix}`);
   };
 
   const openPreview = async () => {
-    setStatus(UI.previewBuilding);
+    showNotice(UI.previewBuilding);
     store.saveAll();
 
     const [rendered, fullMenu] = await Promise.all([
@@ -278,13 +303,13 @@ export default function Home() {
       fullMenuHeight: fullMenu.height,
     });
     window.open("/preview", "reaction-preview", "width=920,height=760");
-    setStatus(UI.previewOpened);
+    showNotice(UI.previewOpened);
   };
 
-  const applyBulkCountColor = () => applyPatchByScope({ countColor: bulkCountColor }, UI.countColorDone);
-  const applyBulkTextColor = () => applyPatchByScope({ textColor: bulkTextColor }, UI.textColorDone);
+  const applyBulkCountColor = () => applyPatchByScope({ countColor: clonePaint(bulkCountColor) }, UI.countColorDone);
+  const applyBulkTextColor = () => applyPatchByScope({ textColor: clonePaint(bulkTextColor) }, UI.textColorDone);
   const applyBulkBothColors = () =>
-    applyPatchByScope({ countColor: bulkCountColor, textColor: bulkTextColor }, UI.styleDone);
+    applyPatchByScope({ countColor: clonePaint(bulkCountColor), textColor: clonePaint(bulkTextColor) }, UI.styleDone);
   const applyBulkBadges = () => applyPatchByScope({ badges: cloneBadges(bulkBadges) }, UI.badgeDone);
 
   const applyStylePreset = (presetId: string) => {
@@ -294,7 +319,7 @@ export default function Home() {
     setBulkCountColor(preset.countColor);
     setBulkTextColor(preset.textColor);
     applyPatchByScope(
-      { countColor: preset.countColor, textColor: preset.textColor },
+      { countColor: clonePaint(preset.countColor), textColor: clonePaint(preset.textColor) },
       `${preset.label} 스타일을`,
     );
   };
@@ -314,23 +339,23 @@ export default function Home() {
       }));
 
       store.replaceItems(importedItems);
-      setStatus(formatCountMessage(UI.replacedSuffix, rows.length));
+      showNotice(formatCountMessage(UI.replacedSuffix, rows.length));
     } catch (error) {
       const message = error instanceof Error ? error.message : UI.csvReadError;
       window.alert(message);
-      setStatus(message);
+      showNotice(message);
     }
   };
 
   const downloadCsvExample = () => {
     downloadBlob(createUtf8BomCsvBlob(csvExample), "reaction_menu_example.csv");
-    setStatus(UI.exampleDownloaded);
+    showNotice(UI.exampleDownloaded);
   };
 
   const downloadCurrentCsv = () => {
     const csv = createReactionCsv(store.items);
     downloadBlob(createUtf8BomCsvBlob(csv), "reaction_menu.csv");
-    setStatus(UI.listDownloaded);
+    showNotice(UI.listDownloaded);
   };
 
   const activeBadgeItem = useMemo(
@@ -344,7 +369,7 @@ export default function Home() {
     store.addCenterTextItem(trimmed);
     setCenterTextDraft("");
     setCenterTextModalOpen(false);
-    setStatus("가운데 문구 행을 추가했습니다.");
+    showNotice("가운데 문구 행을 추가했습니다.");
   };
 
   if (!store.isLoaded) {
@@ -354,7 +379,15 @@ export default function Home() {
   return (
     <main className={darkMode ? "min-h-screen bg-zinc-950 text-zinc-100" : "min-h-screen bg-zinc-50 text-zinc-950"}>
       <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 px-5 py-6">
-        <header className={darkMode ? "flex flex-col gap-3 border-b border-zinc-800 pb-5" : "flex flex-col gap-3 border-b border-zinc-200 pb-5"}>
+        <div
+          className={[
+            "sticky top-0 z-40 -mx-5 flex flex-col gap-4 px-5 pb-3 pt-6 backdrop-blur supports-[backdrop-filter]:bg-opacity-80",
+            darkMode
+              ? "border-b border-zinc-800 bg-zinc-950/92 shadow-[0_10px_30px_rgba(0,0,0,0.28)]"
+              : "border-b border-zinc-200 bg-zinc-50/92 shadow-[0_10px_30px_rgba(15,23,42,0.08)]",
+          ].join(" ")}
+        >
+        <header className="flex flex-col gap-3">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div className="flex flex-wrap items-center gap-3">
               <div>
@@ -433,7 +466,7 @@ export default function Home() {
               value={store.fontPreset}
               onChange={(event) => {
                 store.setFontPreset(event.target.value as typeof store.fontPreset);
-                setStatus(UI.fontChanged);
+                showNotice(UI.fontChanged);
               }}
               className={`h-10 min-w-52 rounded-md border px-3 text-sm outline-none ${inputClass}`}
             >
@@ -465,7 +498,7 @@ export default function Home() {
               value={store.contentAlign}
               onChange={(event) => {
                 store.setContentAlign(event.target.value as typeof store.contentAlign);
-                setStatus(event.target.value === "left" ? UI.alignLeft : UI.alignRight);
+                showNotice(event.target.value === "left" ? UI.alignLeft : UI.alignRight);
               }}
               className={`h-10 min-w-44 rounded-md border px-3 text-sm outline-none ${inputClass}`}
             >
@@ -519,7 +552,7 @@ export default function Home() {
             type="button"
             onClick={() => {
               store.saveSettings();
-              setStatus(UI.settingsSaved);
+              showNotice(UI.settingsSaved);
             }}
             className={darkMode ? "h-10 rounded-md border border-zinc-700 px-4 text-sm font-bold hover:border-zinc-400" : "h-10 rounded-md border border-zinc-300 px-4 text-sm font-bold hover:border-zinc-950"}
           >
@@ -542,8 +575,63 @@ export default function Home() {
             {realtimePreviewOpen ? "실시간 미리보기 닫기" : "실시간 미리보기"}
           </button>
 
+          <div
+            className={
+              darkMode
+                ? "flex flex-wrap items-center gap-2 rounded-md border border-zinc-700 bg-zinc-950/70 px-3 py-2"
+                : "flex flex-wrap items-center gap-2 rounded-md border border-zinc-300 bg-white/85 px-3 py-2"
+            }
+          >
+            <span className={`text-xs font-black ${mutedClass}`}>행 옵션</span>
+            <button type="button" onClick={store.addItem} className="button-primary h-9 px-3 text-xs">
+              {UI.add}
+            </button>
+            <button
+              type="button"
+              onClick={() => setCenterTextModalOpen(true)}
+              className="button-secondary h-9 px-3 text-xs"
+            >
+              가운데 문구 추가
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                store.deleteSelected();
+                showNotice(UI.deleted);
+              }}
+              disabled={store.selectedCount === 0}
+              className="button-secondary h-9 px-3 text-xs disabled:cursor-not-allowed disabled:opacity-45"
+            >
+              {UI.remove}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                store.saveOnlyItems();
+                showNotice(UI.itemsSaved);
+              }}
+              className="button-secondary h-9 px-3 text-xs"
+            >
+              {UI.save}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                store.reload();
+                showNotice(UI.dataReloaded);
+              }}
+              className="button-secondary h-9 px-3 text-xs"
+            >
+              {UI.refresh}
+            </button>
+            <span className={`text-xs font-bold ${mutedClass}`}>
+              {UI.selected} {store.selectedCount}개 / {UI.total} {store.items.length}개
+            </span>
+          </div>
+
           <span className={`ml-auto text-sm font-medium ${mutedClass}`}>{status}</span>
         </section>
+        </div>
 
         <details className={`rounded-md border ${surfaceClass}`} open={false}>
           <summary className="cursor-pointer px-4 py-3 text-sm font-bold">
@@ -723,53 +811,6 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="flex flex-wrap items-center gap-3">
-          <button type="button" onClick={store.addItem} className="button-primary">
-            {UI.add}
-          </button>
-          <button
-            type="button"
-            onClick={() => setCenterTextModalOpen(true)}
-            className="button-secondary"
-          >
-            가운데 문구 추가
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              store.deleteSelected();
-              setStatus(UI.deleted);
-            }}
-            disabled={store.selectedCount === 0}
-            className="button-secondary disabled:cursor-not-allowed disabled:opacity-45"
-          >
-            {UI.remove}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              store.saveOnlyItems();
-              setStatus(UI.itemsSaved);
-            }}
-            className="button-secondary"
-          >
-            {UI.save}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              store.reload();
-              setStatus(UI.dataReloaded);
-            }}
-            className="button-secondary"
-          >
-            {UI.refresh}
-          </button>
-          <p className={`ml-auto text-sm font-bold ${mutedClass}`}>
-            {UI.selected} {store.selectedCount}개 / {UI.total} {store.items.length}개
-          </p>
-        </section>
-
         <ReactionTable
           items={store.items}
           selectedIds={store.selectedIds}
@@ -797,6 +838,19 @@ export default function Home() {
           options={renderOptions}
           onClose={() => setRealtimePreviewOpen(false)}
         />
+      ) : null}
+      {toast ? (
+        <div className="pointer-events-none fixed bottom-5 right-5 z-[1300] max-w-sm">
+          <div
+            className={
+              darkMode
+                ? "rounded-md border border-zinc-700 bg-zinc-900/95 px-4 py-3 text-sm font-bold text-zinc-100 shadow-2xl backdrop-blur"
+                : "rounded-md border border-zinc-200 bg-white/95 px-4 py-3 text-sm font-bold text-zinc-900 shadow-2xl backdrop-blur"
+            }
+          >
+            {toast.message}
+          </div>
+        </div>
       ) : null}
       {centerTextModalOpen ? (
         <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/45 p-4">

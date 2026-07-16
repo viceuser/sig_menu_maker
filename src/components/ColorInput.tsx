@@ -76,6 +76,24 @@ function normalizePaint(paint: TextPaint): TextPaint {
   };
 }
 
+function getNormalizedPaintOrNull(paint: TextPaint): TextPaint | null {
+  if (paint.mode === "solid") {
+    const color = normalizeHex(paint.color);
+    return color ? { mode: "solid", color } : null;
+  }
+
+  const from = normalizeHex(paint.from);
+  const to = normalizeHex(paint.to);
+  if (!from || !to) return null;
+
+  return {
+    mode: "gradient",
+    from,
+    to,
+    direction: paint.direction,
+  };
+}
+
 function getPalettePosition(button: HTMLButtonElement | null) {
   if (!button) {
     return {
@@ -182,6 +200,16 @@ export function ColorInput({ value, onChange, label }: ColorInputProps) {
     [onChange, persistRecentColors],
   );
 
+  const syncDraftToParent = useCallback(
+    (next: TextPaint) => {
+      const normalized = getNormalizedPaintOrNull(next);
+      if (!normalized) return;
+      onChange(normalized);
+      setDraft(normalized);
+    },
+    [onChange],
+  );
+
   const applyPresetColor = useCallback(
     (color: string) => {
       const normalized = normalizeHex(color);
@@ -204,35 +232,29 @@ export function ColorInput({ value, onChange, label }: ColorInputProps) {
   );
 
   const applyDraftAndClose = useCallback(() => {
-    if (draft.mode === "solid") {
-      const normalized = normalizeHex(draft.color);
-      if (!normalized) return;
-      commitPaint({ mode: "solid", color: normalized }, true);
-      return;
-    }
-
-    const from = normalizeHex(draft.from);
-    const to = normalizeHex(draft.to);
-    if (!from || !to) return;
-
-    commitPaint(
-      {
-        mode: "gradient",
-        from,
-        to,
-        direction: draft.direction,
-      },
-      true,
-    );
+    const normalized = getNormalizedPaintOrNull(draft);
+    if (!normalized) return;
+    commitPaint(normalized, true);
   }, [commitPaint, draft]);
 
   const updateDraftColor = useCallback(
-    (next: string) => {
-      setDraft((prev) =>
-        prev.mode === "solid" ? { mode: "solid", color: next } : { ...prev, [gradientTarget]: next },
-      );
+    (next: string, commit = false) => {
+      setDraft((prev) => {
+        const nextDraft: TextPaint =
+          prev.mode === "solid" ? { mode: "solid", color: next } : { ...prev, [gradientTarget]: next };
+
+        if (commit) {
+          const normalized = getNormalizedPaintOrNull(nextDraft);
+          if (normalized) {
+            onChange(normalized);
+            return normalized;
+          }
+        }
+
+        return nextDraft;
+      });
     },
-    [gradientTarget],
+    [gradientTarget, onChange],
   );
 
   const togglePalette = () => {
@@ -267,13 +289,14 @@ export function ColorInput({ value, onChange, label }: ColorInputProps) {
                   </button>
                   <select
                     value={draft.direction}
-                    onChange={(event) =>
-                      setDraft((prev) =>
-                        prev.mode === "gradient"
-                          ? { ...prev, direction: event.target.value as GradientDirection }
-                          : prev,
-                      )
-                    }
+                    onChange={(event) => {
+                      if (draft.mode !== "gradient") return;
+
+                      syncDraftToParent({
+                        ...draft,
+                        direction: event.target.value as GradientDirection,
+                      });
+                    }}
                     className="ml-auto h-8 rounded-md border border-zinc-300 bg-white px-2 text-xs outline-none focus:border-zinc-950 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-zinc-300"
                   >
                     <option value="horizontal">가로</option>
@@ -313,12 +336,18 @@ export function ColorInput({ value, onChange, label }: ColorInputProps) {
                 <input
                   value={activeSolidColor}
                   onChange={(event) => updateDraftColor(event.target.value)}
+                  onBlur={() => syncDraftToParent(draft)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      syncDraftToParent(draft);
+                    }
+                  }}
                   className="h-9 flex-1 rounded-md border border-zinc-300 px-2 font-mono text-sm outline-none focus:border-zinc-950 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-zinc-300"
                 />
                 <input
                   type="color"
                   value={normalizeHex(activeSolidColor) ?? "#ffffff"}
-                  onChange={(event) => updateDraftColor(event.target.value)}
+                  onChange={(event) => updateDraftColor(event.target.value, true)}
                   className="h-9 w-12 rounded-md border border-zinc-300 bg-white dark:border-zinc-700 dark:bg-zinc-950"
                 />
                 <button
@@ -344,15 +373,15 @@ export function ColorInput({ value, onChange, label }: ColorInputProps) {
           onChange={(event) => {
             const mode = event.target.value as TextPaint["mode"];
             if (mode === "solid") {
-              setDraft({ mode: "solid", color: activeSolidColor });
+              syncDraftToParent({ mode: "solid", color: activeSolidColor });
               return;
             }
 
-            setDraft({
+            syncDraftToParent({
               mode: "gradient",
-              from: value.mode === "gradient" ? value.from : activeSolidColor,
-              to: value.mode === "gradient" ? value.to : "#ffffff",
-              direction: value.mode === "gradient" ? value.direction : "horizontal",
+              from: draft.mode === "gradient" ? draft.from : activeSolidColor,
+              to: draft.mode === "gradient" ? draft.to : "#ffffff",
+              direction: draft.mode === "gradient" ? draft.direction : "horizontal",
             });
           }}
           className="h-9 rounded-md border border-zinc-300 bg-white px-2 text-sm outline-none focus:border-zinc-950 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-zinc-300"
@@ -365,6 +394,12 @@ export function ColorInput({ value, onChange, label }: ColorInputProps) {
           aria-label={label}
           value={activeSolidColor}
           onChange={(event) => updateDraftColor(event.target.value)}
+          onBlur={() => syncDraftToParent(draft)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              syncDraftToParent(draft);
+            }
+          }}
           className="h-9 w-28 rounded-md border border-zinc-300 bg-white px-2 font-mono text-sm text-zinc-900 outline-none focus:border-zinc-950 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-zinc-300"
         />
 

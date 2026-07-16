@@ -93,13 +93,44 @@ export function useReactionStore() {
     reload();
   }, [reload]);
 
-  const addItem = useCallback(() => {
-    setItems((prev) => [...prev, createReactionItem()]);
-  }, []);
+  const insertItemNearSelection = useCallback(
+    (nextItem: ReactionItem) => {
+      setItems((prev) => {
+        if (selectedIds.size === 0) {
+          return [...prev, nextItem];
+        }
 
-  const addCenterTextItem = useCallback((text = "") => {
-    setItems((prev) => [...prev, createCenterTextItem(text)]);
-  }, []);
+        let insertIndex = -1;
+        prev.forEach((item, index) => {
+          if (selectedIds.has(item.id)) {
+            insertIndex = index;
+          }
+        });
+
+        if (insertIndex < 0) {
+          return [...prev, nextItem];
+        }
+
+        const next = [...prev];
+        next.splice(insertIndex + 1, 0, nextItem);
+        return next;
+      });
+
+      setSelectedIds(new Set([nextItem.id]));
+    },
+    [selectedIds],
+  );
+
+  const addItem = useCallback(() => {
+    insertItemNearSelection(createReactionItem());
+  }, [insertItemNearSelection]);
+
+  const addCenterTextItem = useCallback(
+    (text = "") => {
+      insertItemNearSelection(createCenterTextItem(text));
+    },
+    [insertItemNearSelection],
+  );
 
   const updateItem = useCallback((id: string, patch: Partial<ReactionItem>) => {
     setItems((prev) => prev.map((item) => (item.id === id ? { ...item, ...patch } : item)));
